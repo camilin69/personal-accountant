@@ -1,7 +1,7 @@
 // pages/Goals.tsx
 
 import React, { useState } from 'react';
-import { useStore } from '../store/useStore';
+import { useStore, useAvailableBalance, useTotalBalance, useGoalsAllocatedBalance } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
 import { 
   Plus, 
@@ -10,11 +10,12 @@ import {
   TrendingUp, 
   Trash2, 
   Edit2, 
-  CheckCircle,
   Sparkles,
   X,
   Save,
-  ArrowRight
+  CheckCircle,
+  Wallet,
+  ShoppingBag
 } from 'lucide-react';
 import GoalDetailModal from '../components/modals/GoalDetailModal';
 import ConfirmModal from '../components/common/ConfirmModal';
@@ -22,16 +23,25 @@ import ToastNotification from '../components/common/ToastNotification';
 import GoalModal from '../components/modals/GoalModal';
 
 const Goals: React.FC = () => {
-  const { goals, addGoal, updateGoal, deleteGoal } = useStore();
+  const { goals, categories, addGoal, updateGoal, deleteGoal, addTransaction } = useStore();
+  const totalBalance = useTotalBalance();
+  const allocatedToGoals = useGoalsAllocatedBalance();
+  const availableBalance = useAvailableBalance();
+  
   const [showGoalModal, setShowGoalModal] = useState(false);
   const [showDetailModal, setShowDetailModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [showCompleteConfirm, setShowCompleteConfirm] = useState(false);
   const [editingGoal, setEditingGoal] = useState<any>(null);
   const [selectedGoalId, setSelectedGoalId] = useState<string | null>(null);
   const [goalToDelete, setGoalToDelete] = useState<{ id: string; name: string } | null>(null);
+  const [goalToComplete, setGoalToComplete] = useState<any>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
+
+  // Buscar categoría "Goals" para transacciones de compra
+  const goalCategory = categories.find(c => c.name === 'Goals' && c.type === 'expense');
 
   const activeGoals = goals.filter(g => g.status === 'active');
   const completedGoals = goals.filter(g => g.status === 'completed');
@@ -80,8 +90,38 @@ const Goals: React.FC = () => {
     setShowDeleteConfirm(true);
   };
 
+  const handleCompletePurchase = (goal: any) => {
+    setGoalToComplete(goal);
+    setShowCompleteConfirm(true);
+  };
+
+  const confirmCompletePurchase = () => {
+    if (goalToComplete) {
+      // Crear transacción de tipo expense para la categoría "Goals"
+      if (goalCategory) {
+        addTransaction({
+          amount: goalToComplete.currentAmount,
+          categoryId: goalCategory.id,
+          description: `Purchase: ${goalToComplete.name}`,
+          date: new Date().toISOString().split('T')[0],
+          tags: ['goal', 'purchase'],
+        });
+        showSuccessToast(`🎉 Goal "${goalToComplete.name}" purchased and completed!`);
+      } else {
+        showErrorToast('Goal category not found. Please create a "Goals" expense category first.');
+        setShowCompleteConfirm(false);
+        return;
+      }
+      
+      // Marcar la meta como completada
+      updateGoal(goalToComplete.id, { status: 'completed' });
+      setGoalToComplete(null);
+      setShowDetailModal(false);
+    }
+    setShowCompleteConfirm(false);
+  };
+
   const handleOpenDetail = (goal: any) => {
-    console.log('Opening detail for goal:', goal.id, goal.name, 'status:', goal.status);
     setSelectedGoalId(goal.id);
     setShowDetailModal(true);
   };
@@ -90,6 +130,9 @@ const Goals: React.FC = () => {
     setShowDetailModal(false);
     setSelectedGoalId(null);
   };
+
+  // Obtener el goal actual para el modal de detalle
+  const selectedGoal = selectedGoalId ? goals.find(g => g.id === selectedGoalId) : null;
 
   return (
     <div className="max-w-7xl mx-auto">
@@ -112,6 +155,31 @@ const Goals: React.FC = () => {
           <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
           New Goal
         </button>
+      </div>
+
+      {/* Balance Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-4 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <Wallet className="w-4 h-4 text-[#6366F1]" />
+            <span className="text-xs text-white/40">Total Balance</span>
+          </div>
+          <p className="text-2xl font-light text-[#6366F1]">{formatCurrency(totalBalance)}</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-4 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <Target className="w-4 h-4 text-yellow-500" />
+            <span className="text-xs text-white/40">In Goals</span>
+          </div>
+          <p className="text-2xl font-light text-yellow-500">{formatCurrency(allocatedToGoals)}</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-4 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <Sparkles className="w-4 h-4 text-green-500" />
+            <span className="text-xs text-white/40">Available</span>
+          </div>
+          <p className="text-2xl font-light text-green-500">{formatCurrency(availableBalance)}</p>
+        </div>
       </div>
 
       {/* Summary Stats */}
@@ -152,6 +220,7 @@ const Goals: React.FC = () => {
             {activeGoals.map(goal => {
               const progress = (goal.currentAmount / goal.targetAmount) * 100;
               const remaining = goal.targetAmount - goal.currentAmount;
+              const isCompleted = progress >= 100;
               const priorityColor = goal.priority === 'high' ? 'text-red-500/80 bg-red-500/10' : 
                                    goal.priority === 'medium' ? 'text-yellow-500/80 bg-yellow-500/10' : 
                                    'text-green-500/80 bg-green-500/10';
@@ -206,10 +275,24 @@ const Goals: React.FC = () => {
                     <span>{formatCurrency(remaining)} left</span>
                   </div>
                   
-                  <div className="flex items-center gap-2 text-[10px] text-white/30">
+                  <div className="flex items-center gap-2 text-[10px] text-white/30 mb-4">
                     <Calendar className="w-3 h-3" />
                     Deadline: {formatDate(goal.targetDate, 'long')}
                   </div>
+
+                  {/* Complete Purchase Button - Solo visible cuando la meta está al 100% */}
+                  {isCompleted && (
+                    <button
+                      onClick={(e) => {
+                        e.stopPropagation();
+                        handleCompletePurchase(goal);
+                      }}
+                      className="w-full py-2 rounded-lg text-xs font-light flex items-center justify-center gap-2 transition-all duration-300 bg-gradient-to-r from-[#6366F1] to-[#EC4899] text-white hover:scale-[1.02]"
+                    >
+                      <ShoppingBag className="w-3 h-3" />
+                      Complete Purchase
+                    </button>
+                  )}
                 </div>
               );
             })}
@@ -281,7 +364,7 @@ const Goals: React.FC = () => {
         </div>
       )}
 
-      {/* Goal Modal */}
+      {/* Modals */}
       <GoalModal
         isOpen={showGoalModal}
         onClose={() => {
@@ -292,28 +375,24 @@ const Goals: React.FC = () => {
         editingGoal={editingGoal}
       />
 
-      {/* Goal Detail Modal */}
       <GoalDetailModal
         isOpen={showDetailModal}
         onClose={handleCloseDetailModal}
         goalId={selectedGoalId}
         onEdit={() => {
-          const goal = goals.find(g => g.id === selectedGoalId);
-          if (goal) {
+          if (selectedGoal) {
             handleCloseDetailModal();
-            handleEditGoal(goal);
+            handleEditGoal(selectedGoal);
           }
         }}
         onDelete={() => {
-          const goal = goals.find(g => g.id === selectedGoalId);
-          if (goal) {
+          if (selectedGoal) {
             handleCloseDetailModal();
-            confirmDelete(goal.id, goal.name);
+            confirmDelete(selectedGoal.id, selectedGoal.name);
           }
         }}
       />
 
-      {/* Confirm Delete Modal */}
       <ConfirmModal
         isOpen={showDeleteConfirm}
         onClose={() => setShowDeleteConfirm(false)}
@@ -324,7 +403,17 @@ const Goals: React.FC = () => {
         type="danger"
       />
 
-      {/* Toast Notification */}
+      <ConfirmModal
+        isOpen={showCompleteConfirm}
+        onClose={() => setShowCompleteConfirm(false)}
+        onConfirm={confirmCompletePurchase}
+        title="Complete Purchase"
+        message={`Are you sure you want to complete the purchase of "${goalToComplete?.name}" for ${formatCurrency(goalToComplete?.currentAmount || 0)}? This will create a transaction and mark the goal as completed.`}
+        confirmText="Complete Purchase"
+        type="success"
+        icon={<ShoppingBag className="w-5 h-5" />}
+      />
+
       <ToastNotification
         isOpen={showToast}
         onClose={() => setShowToast(false)}

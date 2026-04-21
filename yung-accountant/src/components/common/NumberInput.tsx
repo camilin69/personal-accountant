@@ -15,7 +15,7 @@ interface NumberInputProps {
   showPreview?: boolean;
   previewLabel?: string;
   label?: string;
-  error?: string;
+  error?: string | null;
   className?: string;
 }
 

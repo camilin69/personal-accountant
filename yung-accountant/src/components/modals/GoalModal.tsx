@@ -4,8 +4,9 @@ import React, { useState, useEffect } from 'react';
 import { useStore } from '../../store/useStore';
 import { formatInputNumber, parseDottedNumber, isValidDate } from '../../utils/formatters';
 import NumberInput from '../common/NumberInput';
+import CustomSelect, { type SelectOption } from '../common/CustomSelect';
 import ToastNotification from '../common/ToastNotification';
-import { X, Save, Calendar } from 'lucide-react';
+import { X, Save } from 'lucide-react';
 
 type Priority = 'low' | 'medium' | 'high';
 
@@ -17,30 +18,33 @@ interface GoalModalProps {
 }
 
 const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingGoal }) => {
-  const { goals } = useStore();
+  const { goals, categories } = useStore();
   const [formData, setFormData] = useState({
     name: '',
     targetAmount: 0,
     targetDate: '',
     priority: 'medium' as Priority,
     context: '',
+    purchaseCategoryId: '',
   });
   const [nameError, setNameError] = useState<string | null>(null);
   const [dateError, setDateError] = useState<string | null>(null);
+  const [categoryError, setCategoryError] = useState<string | null>(null);
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('error');
 
-  // Obtener la fecha mínima (día actual)
-  const minDate = new Date().toISOString().split('T')[0];
+  // Obtener categorías de tipo expense
+  const expenseCategories = categories.filter(c => c.type === 'expense');
+  
+  const categoryOptions: SelectOption[] = expenseCategories.map(cat => ({
+    id: cat.id,
+    label: cat.name,
+    icon: cat.icon,
+    color: cat.color,
+  }));
 
-  // Función para formatear fecha correctamente sin offset de zona horaria
-  const formatDisplayDate = (dateString: string): string => {
-    if (!dateString) return '';
-    const [year, month, day] = dateString.split('-');
-    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
-    return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
-  };
+  const minDate = new Date().toISOString().split('T')[0];
 
   useEffect(() => {
     if (editingGoal) {
@@ -50,6 +54,7 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
         targetDate: editingGoal.targetDate || '',
         priority: editingGoal.priority as Priority,
         context: editingGoal.context || '',
+        purchaseCategoryId: editingGoal.purchaseCategoryId || '',
       });
     } else {
       setFormData({
@@ -58,10 +63,12 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
         targetDate: '',
         priority: 'medium',
         context: '',
+        purchaseCategoryId: '',
       });
     }
     setNameError(null);
     setDateError(null);
+    setCategoryError(null);
   }, [editingGoal, isOpen]);
 
   const validateName = (name: string): boolean => {
@@ -82,15 +89,21 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
   };
 
   const validateDate = (date: string): boolean => {
-    if (!date) {
-      setDateError('Target date is required');
-      return false;
-    }
+    if (!date) return true;
     if (!isValidDate(date)) {
       setDateError('Target date cannot be in the past');
       return false;
     }
     setDateError(null);
+    return true;
+  };
+
+  const validateCategory = (categoryId: string): boolean => {
+    if (!categoryId) {
+      setCategoryError('Please select a category for the purchase');
+      return false;
+    }
+    setCategoryError(null);
     return true;
   };
 
@@ -109,9 +122,12 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
     setFormData({ ...formData, targetDate: value });
     if (value) {
       validateDate(value);
-    } else {
-      setDateError('Target date is required');
     }
+  };
+
+  const handleCategoryChange = (value: string) => {
+    setFormData({ ...formData, purchaseCategoryId: value });
+    validateCategory(value);
   };
 
   const handlePriorityChange = (priority: Priority) => {
@@ -142,14 +158,14 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
       return;
     }
     
-    if (!formData.targetDate) {
-      setToastMessage('Please select a target date');
+    if (!formData.purchaseCategoryId) {
+      setToastMessage('Please select a category for the purchase');
       setToastType('error');
       setShowToast(true);
       return;
     }
     
-    if (!validateDate(formData.targetDate)) {
+    if (formData.targetDate && !validateDate(formData.targetDate)) {
       setToastMessage('Target date cannot be in the past');
       setToastType('error');
       setShowToast(true);
@@ -170,6 +186,13 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
     { value: 'medium', label: 'Medium', color: 'yellow' },
     { value: 'high', label: 'High', color: 'red' },
   ];
+
+  const formatDisplayDate = (dateString: string): string => {
+    if (!dateString) return '';
+    const [year, month, day] = dateString.split('-');
+    const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    return date.toLocaleDateString('es-CO', { day: 'numeric', month: 'long', year: 'numeric' });
+  };
 
   return (
     <>
@@ -223,10 +246,27 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
               />
             </div>
 
+            {/* Categoría de compra */}
+            <div>
+              <label className="block text-xs text-white/40 mb-1.5 font-light">
+                Purchase Category <span className="text-red-500">*</span>
+              </label>
+              <CustomSelect
+                value={formData.purchaseCategoryId}
+                onChange={handleCategoryChange}
+                options={categoryOptions}
+                placeholder="Select a category for the purchase"
+                error={categoryError}
+              />
+              <p className="text-[9px] text-white/30 mt-1">
+                This category will be used when you complete the purchase
+              </p>
+            </div>
+
             {/* Fecha objetivo */}
             <div>
               <label className="block text-xs text-white/40 mb-1.5 font-light">
-                Target Date <span className="text-red-500">*</span>
+                Target Date
               </label>
               <div className="relative">
                 <input
@@ -237,9 +277,7 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
                   className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors ${
                     dateError ? 'border-red-500/50' : 'border-white/10'
                   }`}
-                  required
                 />
-                <Calendar className="absolute right-3 top-1/2 -translate-y-1/2 w-4 h-4 text-white/40 pointer-events-none" />
               </div>
               {dateError && <p className="text-[10px] text-red-500/80 mt-1">{dateError}</p>}
               {!dateError && formData.targetDate && (

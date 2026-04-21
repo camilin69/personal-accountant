@@ -4,6 +4,7 @@ import Layout from './components/layout/Layout';
 import Dashboard from './pages/Dashboard';
 import CalendarTransactions from './pages/CalendarTransactions';
 import Transactions from './pages/Transactions';
+import Wallets from './pages/Wallets';
 import Categories from './pages/Categories';
 import Goals from './pages/Goals';
 import Debts from './pages/Debts';
@@ -20,6 +21,7 @@ function App() {
           <Route path="calendar" element={<CalendarTransactions />} />
           <Route path="categories" element={<Categories />} />
           <Route path="transactions" element={<Transactions />} />
+          <Route path="wallets" element={<Wallets />} />
           <Route path="goals" element={<Goals />} />
           <Route path="debts" element={<Debts />} />
           <Route path="habits" element={<Habits />} />

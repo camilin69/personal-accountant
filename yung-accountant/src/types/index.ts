@@ -19,6 +19,22 @@ export interface Category {
   createdAt: string;
 }
 
+export interface Wallet {
+  id: string;
+  userId: string;
+  name: string;
+  type: 'cash' | 'bank_account' | 'credit_card' | 'debit_card' | 'other';
+  bankName?: string;
+  lastFourDigits?: string;
+  color: string;
+  icon: string;
+  initialBalance: number;
+  currentBalance: number;
+  isActive: boolean;
+  createdAt: string;
+}
+
+
 export interface Transaction {
   id: string;
   userId: string;
@@ -27,6 +43,7 @@ export interface Transaction {
   categoryId: string;
   categoryName?: string;
   description: string;
+  walletId: string;
   tags: string[];
 }
 
@@ -65,25 +82,49 @@ export interface BaseGoal {
   priority: 'high' | 'medium' | 'low';
   status: 'active' | 'completed' | 'failed';
   context: string;
+  purchaseCategoryId?: string;
   completedAt?: string;
 }
 
 export interface Goal extends BaseGoal {
   transactions?: GoalTransaction[];
+  allocatedAmount?: number;
 }
+
+// types/index.ts
 
 export interface Debt {
   id: string;
   userId: string;
-  creditor: string;
+  type: 'borrowed' | 'lent';
+  creditorName: string;
+  walletId: string;
+  categoryId: string;
   originalAmount: number;
   remainingBalance: number;
   interestRate: number;
+  interestType: 'fixed' | 'variable';
   termMonths: number;
   monthlyPayment: number;
   startDate: string;
+  nextDueDate: string;
   status: 'active' | 'paid' | 'defaulted';
+  notes?: string;
+  payments?: DebtPayment[];
+  createdAt: string;
 }
+
+export interface DebtPayment {
+  id: string;
+  debtId: string;
+  amount: number;
+  date: string;
+  interestAmount: number;
+  principalAmount: number;
+  remainingBalance: number;
+  notes?: string;
+}
+
 
 export interface Habit {
   id: string;
@@ -170,6 +211,13 @@ export interface StoreState {
   updateTransaction: (id: string, updates: Partial<Transaction>) => void;
   deleteTransaction: (id: string) => void;
   
+  wallets: Wallet[];
+  setWallets: (wallets: Wallet[]) => void;
+  addWallet: (wallet: Omit<Wallet, 'id' | 'userId' | 'createdAt' | 'currentBalance'>) => void;
+  updateWallet: (id: string, updates: Partial<Wallet>) => void;
+  deleteWallet: (id: string) => void;
+  updateWalletBalance: (walletId: string, amount: number, isIncome: boolean) => void;
+
   // Simulation Transaction actions
   addSimulationTransaction: (transaction: Omit<SimulationTransaction, 'id' | 'userId' | 'createdAt'>) => void;
   updateSimulationTransaction: (id: string, updates: Partial<SimulationTransaction>) => void;
@@ -183,9 +231,10 @@ export interface StoreState {
   updateGoalAmount: (goalId: string, amount: number) => void;
   
   // Debt actions
-  addDebt: (debt: Omit<Debt, 'id' | 'userId'>) => void;
+  addDebt: (debt: Omit<Debt, 'id' | 'userId' | 'createdAt' | 'remainingBalance' | 'payments'>) => void;
   updateDebt: (id: string, updates: Partial<Debt>) => void;
   deleteDebt: (id: string) => void;
+  addDebtPayment: (debtId: string, payment: Omit<DebtPayment, 'id' | 'debtId'>) => void;
   
   // Habit actions
   addHabit: (habit: Omit<Habit, 'id' | 'currentStreak' | 'bestStreak' | 'userId'>) => void;

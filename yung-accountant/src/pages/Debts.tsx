@@ -3,255 +3,444 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { HandCoins, Plus, TrendingDown, Calendar, DollarSign, Percent } from 'lucide-react';
+import { Plus, Trash2, Edit2, X, Save, TrendingUp, TrendingDown, Wallet, Calendar, ArrowLeftRight, CheckCircle } from 'lucide-react';
+import CustomSelect from '../components/common/CustomSelect';
+import NumberInput from '../components/common/NumberInput';
+import ConfirmModal from '../components/common/ConfirmModal';
+import ToastNotification from '../components/common/ToastNotification';
+import DebtDetailModal from '../components/modals/DebtDetailModal';
 
 const Debts: React.FC = () => {
-  const { debts, addDebt, updateDebt, deleteDebt } = useStore();
+  const { debts, wallets, categories, addDebt, updateDebt, deleteDebt, addTransaction, updateWalletBalance } = useStore();
   const [showModal, setShowModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [editingDebt, setEditingDebt] = useState<any>(null);
+  const [selectedDebtId, setSelectedDebtId] = useState<string | null>(null);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [debtToDelete, setDebtToDelete] = useState<string | null>(null);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
   const [formData, setFormData] = useState({
-    creditor: '',
-    originalAmount: '',
-    interestRate: '',
-    termMonths: '',
+    type: 'borrowed' as 'borrowed' | 'lent',
+    creditorName: '',
+    walletId: '',
+    categoryId: '',
+    originalAmount: 0,
+    monthlyPayment: 0,
+    interestRate: 0,
+    interestType: 'fixed' as 'fixed' | 'variable',
+    termMonths: 12,
     startDate: new Date().toISOString().split('T')[0],
+    notes: '',
+  });
+  const [errors, setErrors] = useState({
+    creditorName: '',
+    walletId: '',
+    categoryId: '',
+    originalAmount: '',
   });
 
-  const activeDebts = debts.filter(d => d.status === 'active');
-  const totalDebt = activeDebts.reduce((sum, d) => sum + d.remainingBalance, 0);
+  const walletOptions = wallets
+    .filter(w => w.isActive)
+    .map(w => ({
+      id: w.id,
+      label: `${w.icon} ${w.name}${w.lastFourDigits ? ` (****${w.lastFourDigits})` : ''}`,
+      icon: w.icon,
+      color: w.color,
+    }));
 
-  const handleSubmit = (e: React.FormEvent) => {
-    e.preventDefault();
-    if (!formData.creditor || !formData.originalAmount) return;
+  // Categorías de expense para préstamos (lent) y income para borrowed
+  const expenseCategories = categories.filter(c => c.type === 'expense');
+  const incomeCategories = categories.filter(c => c.type === 'income');
+  
+  const categoryOptions = formData.type === 'borrowed' 
+    ? incomeCategories.map(c => ({ id: c.id, label: c.name, icon: c.icon, color: c.color }))
+    : expenseCategories.map(c => ({ id: c.id, label: c.name, icon: c.icon, color: c.color }));
 
-    const originalAmount = parseFloat(formData.originalAmount);
-    const interestRate = parseFloat(formData.interestRate) || 0;
-    const termMonths = parseInt(formData.termMonths) || 12;
-    
-    // Calculate monthly payment (simple interest formula)
-    const monthlyRate = interestRate / 100;
-    let monthlyPayment = 0;
-    if (monthlyRate > 0) {
-      monthlyPayment = (originalAmount * monthlyRate * Math.pow(1 + monthlyRate, termMonths)) / 
-                       (Math.pow(1 + monthlyRate, termMonths) - 1);
-    } else {
-      monthlyPayment = originalAmount / termMonths;
+  const calculateMonthlyPayment = (amount: number, rate: number, months: number): number => {
+    if (rate === 0) return amount / months;
+    const monthlyRate = rate / 100;
+    return (amount * monthlyRate * Math.pow(1 + monthlyRate, months)) / (Math.pow(1 + monthlyRate, months) - 1);
+  };
+
+  const monthlyPayment = calculateMonthlyPayment(formData.originalAmount, formData.interestRate, formData.termMonths);
+  
+  const monthlyPaymentValue = formData.monthlyPayment;
+  const totalToPay = formData.monthlyPayment * formData.termMonths;
+  const totalInterest = totalToPay - formData.originalAmount;
+
+  const handleSubmit = () => {
+    if (!formData.creditorName.trim()) {
+      setErrors(prev => ({ ...prev, creditorName: 'Name is required' }));
+      return;
+    }
+    if (!formData.walletId) {
+      setErrors(prev => ({ ...prev, walletId: 'Wallet is required' }));
+      return;
+    }
+    if (!formData.categoryId) {
+      setErrors(prev => ({ ...prev, categoryId: 'Category is required' }));
+      return;
+    }
+    if (formData.originalAmount <= 0) {
+      setErrors(prev => ({ ...prev, originalAmount: 'Amount must be greater than 0' }));
+      return;
     }
 
-    addDebt({
-      creditor: formData.creditor,
-      originalAmount,
-      remainingBalance: originalAmount,
-      interestRate,
-      termMonths,
-      monthlyPayment,
-      startDate: formData.startDate,
-      status: 'active',
+    const category = categories.find(c => c.id === formData.categoryId);
+    const isIncome = formData.type === 'borrowed'; // Me prestaron → ingreso
+
+    // Crear la deuda
+    if (editingDebt) {
+      updateDebt(editingDebt.id, {
+        ...formData,
+        monthlyPayment: formData.monthlyPayment,
+      });
+      setToastMessage('Debt updated successfully');
+    } else {
+      addDebt({
+        ...formData,
+        monthlyPayment: formData.monthlyPayment,
+        status: 'active',
+        nextDueDate: ''
+      });
+      setToastMessage('Debt created successfully');
+    }
+    setToastType('success');
+    setShowToast(true);
+    resetForm();
+    setShowModal(false);
+  };
+
+  const resetForm = () => {
+    setFormData({
+      type: 'borrowed',
+      creditorName: '',
+      walletId: '',
+      categoryId: '',
+      originalAmount: 0,
+      monthlyPayment: 0,
+      interestRate: 0,
+      interestType: 'fixed',
+      termMonths: 12,
+      startDate: new Date().toISOString().split('T')[0],
+      notes: '',
     });
 
-    setShowModal(false);
-    setFormData({ creditor: '', originalAmount: '', interestRate: '', termMonths: '', startDate: new Date().toISOString().split('T')[0] });
+    setErrors({
+      creditorName: '',
+      walletId: '',
+      categoryId: '',
+      originalAmount: '',
+    });
+    setEditingDebt(null);
   };
 
-  const handleMakePayment = (id: string) => {
-    const amount = prompt('Payment amount:');
-    if (amount && !isNaN(parseFloat(amount))) {
-      const debt = debts.find(d => d.id === id);
-      if (debt) {
-        const newBalance = debt.remainingBalance - parseFloat(amount);
-        if (newBalance <= 0) {
-          updateDebt(id, { remainingBalance: 0, status: 'paid' });
-        } else {
-          updateDebt(id, { remainingBalance: newBalance });
-        }
-      }
+  const handleEdit = (debt: any) => {
+    setEditingDebt(debt);
+    setFormData({
+      type: debt.type,
+      creditorName: debt.creditorName,
+      walletId: debt.walletId,
+      categoryId: debt.categoryId,
+      originalAmount: debt.originalAmount,
+      monthlyPayment: debt.monthlyPayment,
+      interestRate: debt.interestRate,
+      interestType: debt.interestType,
+      termMonths: debt.termMonths,
+      startDate: debt.startDate,
+      notes: debt.notes || '',
+    });
+    setShowModal(true);
+  };
+
+
+  const handleDelete = (id: string) => {
+    setDebtToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (debtToDelete) {
+      deleteDebt(debtToDelete);
+      setToastMessage('Debt deleted successfully');
+      setToastType('success');
+      setShowToast(true);
+      setDebtToDelete(null);
+      setShowDeleteConfirm(false); // Cerrar modal inmediatamente
+      setShowDetailModal(false); // Cerrar modal de detalle si está abierto
     }
   };
 
-  const handleDeleteDebt = (id: string) => {
-    if (confirm('Delete this debt?')) {
-      deleteDebt(id);
-    }
+  const handleOpenDetail = (debt: any) => {
+    setSelectedDebtId(debt.id);
+    setShowDetailModal(true);
   };
+
+  const borrowedDebts = debts.filter(d => d.type === 'borrowed' && d.status === 'active');
+  const lentDebts = debts.filter(d => d.type === 'lent' && d.status === 'active');
+  const completedDebts = debts.filter(d => d.status === 'paid');
+
+  const totalBorrowed = borrowedDebts.reduce((sum, d) => sum + d.remainingBalance, 0);
+  const totalLent = lentDebts.reduce((sum, d) => sum + d.remainingBalance, 0);
 
   return (
-    <div className="max-w-[1400px] mx-auto">
-      <div className="flex justify-between items-center flex-wrap gap-4 mb-6">
-        <h1 className="text-3xl font-bold bg-gradient-to-r from-primary to-secondary bg-clip-text text-transparent">
-          <HandCoins className="inline mr-2 mb-1 w-7 h-7" />
-          Debts & Credits
-        </h1>
-        <button onClick={() => setShowModal(true)} className="btn btn-primary">
-          <Plus className="w-4 h-4" /> Add Debt
+    <div className="max-w-7xl mx-auto">
+      <div className="flex justify-between items-center mb-8">
+        <div>
+          <h1 className="text-2xl font-light bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent tracking-tight">Debts</h1>
+          <p className="text-xs text-white/40 mt-0.5 font-light">Manage your loans and borrowings</p>
+        </div>
+        <button onClick={() => { resetForm(); setShowModal(true); }} className="group relative px-4 py-2 bg-white/5 hover:bg-white/10 transition-all duration-300 text-white text-sm font-light flex items-center gap-2 overflow-hidden rounded-lg">
+          <span className="absolute inset-0 bg-gradient-to-r from-white/0 via-white/10 to-white/0 -translate-x-full group-hover:translate-x-full transition-transform duration-1000" />
+          <Plus className="w-4 h-4 group-hover:rotate-90 transition-transform duration-300" />
+          Add Debt
         </button>
       </div>
 
-      {/* Total Debt Card */}
-      <div className="card text-center mb-8">
-        <TrendingDown className="w-8 h-8 text-danger mx-auto mb-2" />
-        <div className="text-3xl font-bold text-danger">{formatCurrency(totalDebt)}</div>
-        <div className="text-sm text-gray-500">Total Outstanding Debt</div>
+      {/* Summary Cards */}
+      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingDown className="w-5 h-5 text-red-500" />
+            <span className="text-xs text-white/40">I OWE</span>
+          </div>
+          <p className="text-2xl font-light text-red-500">{formatCurrency(totalBorrowed)}</p>
+          <p className="text-[10px] text-white/30 mt-1">{borrowedDebts.length} active debts</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <TrendingUp className="w-5 h-5 text-green-500" />
+            <span className="text-xs text-white/40">OWED TO ME</span>
+          </div>
+          <p className="text-2xl font-light text-green-500">{formatCurrency(totalLent)}</p>
+          <p className="text-[10px] text-white/30 mt-1">{lentDebts.length} active debts</p>
+        </div>
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800">
+          <div className="flex items-center gap-2 mb-2">
+            <ArrowLeftRight className="w-5 h-5 text-[#6366F1]" />
+            <span className="text-xs text-white/40">NET POSITION</span>
+          </div>
+          <p className={`text-2xl font-light ${totalLent - totalBorrowed >= 0 ? 'text-green-500' : 'text-red-500'}`}>
+            {totalLent - totalBorrowed >= 0 ? '+' : '-'}{formatCurrency(Math.abs(totalLent - totalBorrowed))}
+          </p>
+          <p className="text-[10px] text-white/30 mt-1">What I'm owed - What I owe</p>
+        </div>
       </div>
 
-      {/* Debts List */}
-      {activeDebts.length > 0 && (
-        <div className="space-y-4">
-          <h2 className="text-xl font-semibold">Active Debts</h2>
-          {activeDebts.map(debt => {
-            const paidPercent = ((debt.originalAmount - debt.remainingBalance) / debt.originalAmount) * 100;
-            const monthsSinceStart = Math.max(0, Math.floor((new Date().getTime() - new Date(debt.startDate).getTime()) / (1000 * 60 * 60 * 24 * 30)));
-            const monthsLeft = Math.max(0, debt.termMonths - monthsSinceStart);
-            
-            return (
-              <div key={debt.id} className="card border-l-4 border-l-danger">
-                <div className="flex justify-between items-start flex-wrap gap-4 mb-4">
-                  <div>
-                    <h3 className="text-xl font-semibold">{debt.creditor}</h3>
-                    <div className="flex items-center gap-4 mt-1 text-sm text-gray-500">
-                      <span className="flex items-center gap-1">
-                        <Calendar className="w-3 h-3" />
-                        Started: {formatDate(debt.startDate)}
-                      </span>
-                      <span className="flex items-center gap-1">
-                        <Percent className="w-3 h-3" />
-                        Rate: {debt.interestRate}%
-                      </span>
-                    </div>
-                  </div>
-                  <span className={`px-3 py-1 rounded-full text-xs font-semibold ${
-                    debt.status === 'active' ? 'bg-yellow-500/20 text-yellow-500' : 'bg-green-500/20 text-green-500'
-                  }`}>
-                    {debt.status === 'active' ? 'Active' : 'Paid'}
-                  </span>
-                </div>
+      {/* Borrowed Debts */}
+      {borrowedDebts.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-light text-white/60 mb-4 flex items-center gap-2">
+            <TrendingDown className="w-4 h-4 text-red-500" />
+            Debts I Owe
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {borrowedDebts.map(debt => (
+              <DebtCard key={debt.id} debt={debt} onEdit={handleEdit} onDelete={handleDelete} onClick={handleOpenDetail} />
+            ))}
+          </div>
+        </div>
+      )}
 
-                <div className="grid grid-cols-2 md:grid-cols-4 gap-4 mb-4">
-                  <div>
-                    <div className="text-xs text-gray-500">Remaining Balance</div>
-                    <div className="text-lg font-semibold text-danger">{formatCurrency(debt.remainingBalance)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">Monthly Payment</div>
-                    <div className="text-lg font-semibold">{formatCurrency(debt.monthlyPayment)}</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">Term</div>
-                    <div className="text-lg font-semibold">{debt.termMonths} months</div>
-                  </div>
-                  <div>
-                    <div className="text-xs text-gray-500">Time Left</div>
-                    <div className="text-lg font-semibold">{monthsLeft} months</div>
-                  </div>
-                </div>
+      {/* Lent Debts */}
+      {lentDebts.length > 0 && (
+        <div className="mb-8">
+          <h2 className="text-sm font-light text-white/60 mb-4 flex items-center gap-2">
+            <TrendingUp className="w-4 h-4 text-green-500" />
+            Debts Owed to Me
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {lentDebts.map(debt => (
+              <DebtCard key={debt.id} debt={debt} onEdit={handleEdit} onDelete={handleDelete} onClick={handleOpenDetail} />
+            ))}
+          </div>
+        </div>
+      )}
 
-                <div className="mb-4">
-                  <div className="flex justify-between text-sm mb-1">
-                    <span>Progress</span>
-                    <span>{Math.round(paidPercent)}% paid</span>
-                  </div>
-                  <div className="h-2 bg-gray-700 rounded-full overflow-hidden">
-                    <div className="h-full bg-danger rounded-full transition-all duration-500" style={{ width: `${paidPercent}%` }} />
-                  </div>
-                </div>
-
-                {debt.status === 'active' && (
-                  <div className="flex gap-3">
-                    <button
-                      onClick={() => handleMakePayment(debt.id)}
-                      className="flex-1 py-2 text-sm bg-primary/20 hover:bg-primary/30 text-primary rounded-lg transition-colors"
-                    >
-                      Make Payment
-                    </button>
-                    <button
-                      onClick={() => handleDeleteDebt(debt.id)}
-                      className="py-2 px-4 text-sm bg-red-500/20 hover:bg-red-500/30 text-red-500 rounded-lg transition-colors"
-                    >
-                      Delete
-                    </button>
-                  </div>
-                )}
-              </div>
-            );
-          })}
+      {/* Completed Debts */}
+      {completedDebts.length > 0 && (
+        <div>
+          <h2 className="text-sm font-light text-white/40 mb-4 flex items-center gap-2">
+            <CheckCircle className="w-4 h-4" />
+            Completed
+          </h2>
+          <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+            {completedDebts.map(debt => (
+              <DebtCard key={debt.id} debt={debt} onEdit={handleEdit} onDelete={handleDelete} onClick={handleOpenDetail} isCompleted />
+            ))}
+          </div>
         </div>
       )}
 
       {debts.length === 0 && (
-        <div className="card text-center py-12">
-          <HandCoins className="w-16 h-16 mx-auto mb-4 text-gray-600" />
-          <p className="text-gray-500">No debts recorded. Keep it that way! 💪</p>
+        <div className="bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-xl p-12 text-center">
+          <ArrowLeftRight className="w-16 h-16 mx-auto mb-4 text-white/20" />
+          <p className="text-white/40 text-sm font-light">No debts recorded</p>
+          <button onClick={() => setShowModal(true)} className="mt-4 px-4 py-2 bg-white/5 hover:bg-white/10 rounded-lg text-white text-sm font-light">Add Your First Debt</button>
         </div>
       )}
 
-      {/* Add Debt Modal */}
+      {/* Modales */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 flex items-center justify-center z-50">
-          <div className="bg-card rounded-xl max-w-md w-[90%] p-6 max-h-[90vh] overflow-y-auto">
-            <h3 className="text-xl font-semibold mb-4">Add New Debt</h3>
-            <form onSubmit={handleSubmit} className="space-y-4">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
+            <div className="flex justify-between items-center p-5 border-b border-white/10 sticky top-0 bg-[#1A1A2E]">
+              <h3 className="text-lg font-light text-white">{editingDebt ? 'Edit Debt' : 'New Debt'}</h3>
+              <button onClick={() => { setShowModal(false); resetForm(); }} className="p-2 rounded-lg hover:bg-white/10"><X className="w-5 h-5 text-white/60" /></button>
+            </div>
+            <div className="p-5 space-y-4">
+              {/* Debt Type */}
               <div>
-                <label className="block text-sm font-medium mb-1">Creditor *</label>
-                <input
-                  type="text"
-                  value={formData.creditor}
-                  onChange={(e) => setFormData({ ...formData, creditor: e.target.value })}
-                  className="input"
-                  placeholder="Bank, person, entity..."
+                <label className="block text-xs text-white/40 mb-1.5 font-light">Debt Type *</label>
+                <div className="flex gap-3">
+                  <button onClick={() => setFormData({ ...formData, type: 'borrowed', categoryId: '' })} className={`flex-1 py-2.5 rounded-lg text-sm font-light transition-all duration-200 flex items-center justify-center gap-2 ${formData.type === 'borrowed' ? 'bg-red-500/20 text-red-500 border border-red-500/30' : 'bg-white/[0.03] text-white/40 hover:text-white'}`}>
+                    <TrendingDown className="w-4 h-4" /> I Owe
+                  </button>
+                  <button onClick={() => setFormData({ ...formData, type: 'lent', categoryId: '' })} className={`flex-1 py-2.5 rounded-lg text-sm font-light transition-all duration-200 flex items-center justify-center gap-2 ${formData.type === 'lent' ? 'bg-green-500/20 text-green-500 border border-green-500/30' : 'bg-white/[0.03] text-white/40 hover:text-white'}`}>
+                    <TrendingUp className="w-4 h-4" /> Owed to Me
+                  </button>
+                </div>
+              </div>
+
+              <div><label className="block text-xs text-white/40 mb-1.5 font-light">{formData.type === 'borrowed' ? 'Lender Name' : 'Borrower Name'} *</label>
+                <input type="text" value={formData.creditorName} onChange={(e) => setFormData({ ...formData, creditorName: e.target.value })} className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50" placeholder={formData.type === 'borrowed' ? 'Bank, Friend, Family...' : 'Person who owes you...'} />
+                {errors.creditorName && <p className="text-[10px] text-red-500/80 mt-1">{errors.creditorName}</p>}
+              </div>
+
+              <CustomSelect label="Wallet" value={formData.walletId} onChange={(value) => setFormData({ ...formData, walletId: value })} options={walletOptions} placeholder="Select a wallet" required error={errors.walletId} />
+              
+              <CustomSelect label="Category" value={formData.categoryId} onChange={(value) => setFormData({ ...formData, categoryId: value })} options={categoryOptions} placeholder="Select a category" required error={errors.categoryId} />
+
+              <NumberInput label="Amount" value={formData.originalAmount} onChange={(value) => setFormData({ ...formData, originalAmount: value })} placeholder="0" min={1} required error={errors.originalAmount} showPreview previewLabel="Amount" />
+
+              <div className="grid grid-cols-2 gap-3">
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5 font-light">Interest Rate (%)</label>
+                  <input
+                    type="number"
+                    step="0.01"
+                    value={formData.interestRate}
+                    onChange={(e) => setFormData({ ...formData, interestRate: parseFloat(e.target.value) })}
+                    className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50"
+                    placeholder="0"
+                  />
+                </div>
+                <div>
+                  <label className="block text-xs text-white/40 mb-1.5 font-light">Interest Type</label>
+                  <div className="flex gap-2">
+                    <button onClick={() => setFormData({ ...formData, interestType: 'fixed' })} className={`flex-1 py-2 rounded-lg text-xs font-light transition-all duration-200 ${formData.interestType === 'fixed' ? 'bg-[#6366F1]/20 text-[#6366F1] border border-[#6366F1]/30' : 'bg-white/[0.03] text-white/40 hover:text-white'}`}>Fixed</button>
+                    <button onClick={() => setFormData({ ...formData, interestType: 'variable' })} className={`flex-1 py-2 rounded-lg text-xs font-light transition-all duration-200 ${formData.interestType === 'variable' ? 'bg-[#6366F1]/20 text-[#6366F1] border border-[#6366F1]/30' : 'bg-white/[0.03] text-white/40 hover:text-white'}`}>Variable</button>
+                  </div>
+                </div>
+              </div>
+
+              <div>
+                <NumberInput
+                  label="Monthly Payment"
+                  value={formData.monthlyPayment}
+                  onChange={(value) => setFormData({ ...formData, monthlyPayment: value })}
+                  placeholder="0"
+                  min={1}
                   required
+                  showPreview
+                  previewLabel="Monthly payment"
                 />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Original Amount *</label>
-                <input
-                  type="number"
-                  value={formData.originalAmount}
-                  onChange={(e) => setFormData({ ...formData, originalAmount: e.target.value })}
-                  className="input"
-                  placeholder="7750000"
-                  required
-                />
+
+              <NumberInput label="Term (months)" value={formData.termMonths} onChange={(value) => setFormData({ ...formData, termMonths: value })} placeholder="12" min={1} />
+
+              <div><label className="block text-xs text-white/40 mb-1.5 font-light">Start Date</label>
+                <input type="date" value={formData.startDate} onChange={(e) => setFormData({ ...formData, startDate: e.target.value })} className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light" />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Monthly Interest Rate (%)</label>
-                <input
-                  type="number"
-                  step="0.01"
-                  value={formData.interestRate}
-                  onChange={(e) => setFormData({ ...formData, interestRate: e.target.value })}
-                  className="input"
-                  placeholder="1.87"
-                />
+
+              {formData.originalAmount > 0 && formData.termMonths > 0 && formData.monthlyPayment > 0 && (
+                <div className="p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                  <p className="text-[10px] text-white/40 mb-2">Payment Summary</p>
+                  <div className="space-y-1 text-xs">
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Monthly Payment:</span>
+                      <span className="text-[#6366F1]">{formatCurrency(monthlyPaymentValue)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Total to Pay:</span>
+                      <span className="text-white/60">{formatCurrency(totalToPay)}</span>
+                    </div>
+                    <div className="flex justify-between">
+                      <span className="text-white/40">Total Interest:</span>
+                      <span className="text-yellow-500">{formatCurrency(totalInterest)}</span>
+                    </div>
+                  </div>
+                </div>
+              )}
+
+              <div><label className="block text-xs text-white/40 mb-1.5 font-light">Notes (optional)</label>
+                <textarea value={formData.notes} onChange={(e) => setFormData({ ...formData, notes: e.target.value })} className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light resize-none" rows={2} placeholder="Additional details..." />
               </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Term (months)</label>
-                <input
-                  type="number"
-                  value={formData.termMonths}
-                  onChange={(e) => setFormData({ ...formData, termMonths: e.target.value })}
-                  className="input"
-                  placeholder="12"
-                />
-              </div>
-              <div>
-                <label className="block text-sm font-medium mb-1">Start Date</label>
-                <input
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => setFormData({ ...formData, startDate: e.target.value })}
-                  className="input"
-                />
-              </div>
-              <div className="flex gap-3 pt-4">
-                <button type="button" onClick={() => setShowModal(false)} className="btn btn-outline flex-1">
-                  Cancel
-                </button>
-                <button type="submit" className="btn btn-primary flex-1">
-                  Add Debt
-                </button>
-              </div>
-            </form>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-white/10 sticky bottom-0 bg-[#1A1A2E]">
+              <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 px-4 py-2.5 bg-white/[0.03] hover:bg-white/10 rounded-lg text-white/60 text-sm font-light">Cancel</button>
+              <button onClick={handleSubmit} className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-lg text-white text-sm font-light hover:scale-[1.02] transition-all flex items-center justify-center gap-2"><Save className="w-4 h-4" />{editingDebt ? 'Update' : 'Create'}</button>
+            </div>
           </div>
         </div>
       )}
+
+      <DebtDetailModal isOpen={showDetailModal} onClose={() => { setShowDetailModal(false); setSelectedDebtId(null); }} debtId={selectedDebtId} onEdit={() => { const debt = debts.find(d => d.id === selectedDebtId); if (debt) { setShowDetailModal(false); handleEdit(debt); } }} onDelete={() => { if (selectedDebtId) { handleDelete(selectedDebtId); } }} />
+
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => {
+          setShowDeleteConfirm(false);
+          setDebtToDelete(null);
+        }}
+        onConfirm={confirmDelete}
+        title="Delete Debt"
+        message="Are you sure you want to delete this debt? This action cannot be undone. All associated transactions will also be deleted."
+        confirmText="Delete"
+        type="danger"
+      />
+      <ToastNotification isOpen={showToast} onClose={() => setShowToast(false)} message={toastMessage} type={toastType} />
+    </div>
+  );
+};
+
+// Debt Card Component
+const DebtCard: React.FC<{ debt: any; onEdit: (debt: any) => void; onDelete: (id: string) => void; onClick: (debt: any) => void; isCompleted?: boolean }> = ({ debt, onEdit, onDelete, onClick, isCompleted }) => {
+  const { wallets, categories } = useStore();
+  const wallet = wallets.find(w => w.id === debt.walletId);
+  const category = categories.find(c => c.id === debt.categoryId);
+  const progress = ((debt.originalAmount - debt.remainingBalance) / debt.originalAmount) * 100;
+
+  return (
+    <div onClick={() => onClick(debt)} className="bg-white/[0.03] backdrop-blur-sm border border-white/10 rounded-xl p-5 transition-all duration-300 hover:bg-white/[0.06] hover:scale-[1.02] cursor-pointer group">
+      <div className="flex justify-between items-start mb-3">
+        <div className="flex items-center gap-2">
+          <div className={`w-10 h-10 rounded-xl flex items-center justify-center ${debt.type === 'borrowed' ? 'bg-red-500/10' : 'bg-green-500/10'}`}>
+            {debt.type === 'borrowed' ? <TrendingDown className="w-5 h-5 text-red-500" /> : <TrendingUp className="w-5 h-5 text-green-500" />}
+          </div>
+          <div>
+            <h3 className="text-sm font-light text-white">{debt.creditorName}</h3>
+            <div className="flex items-center gap-2 mt-0.5">
+              <span className="text-[10px] text-white/40">{wallet?.icon} {wallet?.name}</span>
+              <span className="text-[10px] text-white/40">•</span>
+              <span className="text-[10px] text-white/40">{category?.icon} {category?.name}</span>
+            </div>
+          </div>
+        </div>
+        {!isCompleted && <div className="flex gap-1 opacity-0 group-hover:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
+          <button onClick={() => onEdit(debt)} className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white"><Edit2 className="w-3.5 h-3.5" /></button>
+          <button onClick={() => onDelete(debt.id)} className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-500"><Trash2 className="w-3.5 h-3.5" /></button>
+        </div>}
+      </div>
+      <div className="space-y-2">
+        <div className="flex justify-between text-xs"><span className="text-white/40">Remaining</span><span className={debt.type === 'borrowed' ? 'text-red-500' : 'text-green-500'}>{formatCurrency(debt.remainingBalance)}</span></div>
+        <div className="flex justify-between text-xs"><span className="text-white/40">Monthly</span><span className="text-white/60">{formatCurrency(debt.monthlyPayment)}</span></div>
+        <div className="pt-2"><div className="flex justify-between text-[10px] mb-1"><span className="text-white/40">Progress</span><span className="text-white/40">{Math.round(progress)}%</span></div>
+        <div className="h-1.5 bg-white/10 rounded-full overflow-hidden"><div className="h-full bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-full transition-all duration-500" style={{ width: `${Math.min(progress, 100)}%` }} /></div></div>
+        {isCompleted && <div className="flex items-center gap-2 pt-2"><CheckCircle className="w-3.5 h-3.5 text-green-500" /><span className="text-[10px] text-green-500/80">Completed</span></div>}
+      </div>
     </div>
   );
 };

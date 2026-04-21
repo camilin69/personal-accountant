@@ -136,8 +136,8 @@ const Calendar: React.FC<CalendarProps> = ({
         {/* Day number - top right */}
         <div className="absolute top-2 right-2">
           <span className={`
-            text-xs font-medium transition-all duration-300
-            ${day.isFuture ? 'text-white/100' : day.isToday ? 'text-[#6366F1]' : isHovered ? 'text-white' : 'text-white/50'}
+            text-[28px] font-medium transition-all duration-300
+            ${day.isFuture ? 'text-white/100' : day.isToday ? 'text-[#6366F1]' : isHovered ? 'text-white' : 'text-white/80'}
           `}>
             {day.day}
           </span>
@@ -146,16 +146,16 @@ const Calendar: React.FC<CalendarProps> = ({
         {/* Income indicator */}
         {day.dayIncome > 0 && !day.isFuture && (
           <div className="flex items-center gap-0.5 mt-1 transition-all duration-300 group-hover:scale-105">
-            <TrendingUp className="w-2.5 h-2.5 text-green-500" />
-            <span className="text-[9px] text-green-500 font-medium">{formatCurrency(day.dayIncome)}</span>
+            <TrendingUp className="w-2.5 h-2.5 text-green-700" />
+            <span className="text-[16px] text-green-700 font-medium">{formatCurrency(day.dayIncome)}</span>
           </div>
         )}
         
         {/* Expense indicator */}
         {day.dayExpenses > 0 && !day.isFuture && (
           <div className="flex items-center gap-0.5 mt-0.5 transition-all duration-300 group-hover:scale-105">
-            <TrendingDown className="w-2.5 h-2.5 text-red-500" />
-            <span className="text-[9px] text-red-500 font-medium">{formatCurrency(day.dayExpenses)}</span>
+            <TrendingDown className="w-2.5 h-2.5 text-red-700" />
+            <span className="text-[16px] text-red-700 font-medium">{formatCurrency(day.dayExpenses)}</span>
           </div>
         )}
 

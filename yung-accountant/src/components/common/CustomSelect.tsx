@@ -19,7 +19,7 @@ interface CustomSelectProps {
   placeholder?: string;
   label?: string;
   required?: boolean;
-  error?: string;
+  error?: string | null;
   className?: string;
   renderOption?: (option: SelectOption) => React.ReactNode;
   renderValue?: (option: SelectOption | undefined) => React.ReactNode;

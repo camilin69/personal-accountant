@@ -19,8 +19,11 @@ export const parseDottedNumber = (value: string): number => {
   return parseFloat(value.replace(/\./g, '')) || 0;
 };
 
+// Función para formatear fecha SIN offset de zona horaria
 export const formatDate = (date: string, format: 'short' | 'long' | 'relative' = 'short'): string => {
-  const d = new Date(date);
+  // Parsear la fecha manualmente para evitar offset UTC
+  const [year, month, day] = date.split('T')[0].split('-');
+  const d = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   
   if (format === 'short') {
     return d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short' });
@@ -30,7 +33,9 @@ export const formatDate = (date: string, format: 'short' | 'long' | 'relative' =
   }
   if (format === 'relative') {
     const now = new Date();
-    const diff = Math.floor((now.getTime() - d.getTime()) / (1000 * 60 * 60 * 24));
+    const today = new Date(now.getFullYear(), now.getMonth(), now.getDate());
+    const dateObj = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
+    const diff = Math.floor((today.getTime() - dateObj.getTime()) / (1000 * 60 * 60 * 24));
     if (diff === 0) return 'Today';
     if (diff === 1) return 'Yesterday';
     if (diff < 7) return `${diff} days ago`;
@@ -38,7 +43,7 @@ export const formatDate = (date: string, format: 'short' | 'long' | 'relative' =
     return formatDate(date, 'short');
   }
   
-  return d.toISOString().split('T')[0];
+  return `${day}/${month}/${year}`;
 };
 
 export const formatPercentage = (value: number): string => {
@@ -78,22 +83,11 @@ export const getCategoryColor = (category: string): string => {
   return colors[category] || 'text-gray-400';
 };
 
-// Nueva función para formatear número con puntos mientras se escribe
 export const formatInputNumber = (input: string): string => {
-  // Remove all non-digit characters
   const digits = input.replace(/\D/g, '');
   if (!digits) return '';
-  
-  // Convert to number and format with dots
   const num = parseInt(digits, 10);
   return num.toLocaleString('es-CO');
-};
-
-export const formatDateTime = (date: string): string => {
-  const d = new Date(date);
-  const dateStr = d.toLocaleDateString('es-CO', { day: 'numeric', month: 'short', year: 'numeric' });
-  const timeStr = d.toLocaleTimeString('es-CO', { hour: '2-digit', minute: '2-digit' });
-  return `${dateStr} • ${timeStr}`;
 };
 
 export const getCurrentDateTime = (): string => {
@@ -101,8 +95,26 @@ export const getCurrentDateTime = (): string => {
 };
 
 export const isValidDate = (date: string): boolean => {
-  const selectedDate = new Date(date);
+  const [year, month, day] = date.split('-');
+  const selectedDate = new Date(parseInt(year), parseInt(month) - 1, parseInt(day));
   const today = new Date();
   today.setHours(0, 0, 0, 0);
   return selectedDate >= today;
+};
+
+export const formatDateTime = (dateString: string): string => {
+  const [year, month, day] = dateString.split('T')[0].split('-');
+  const timePart = dateString.split('T')[1]?.split('.')[0] || '00:00:00';
+  const [hours, minutes] = timePart.split(':');
+  const date = new Date(parseInt(year), parseInt(month) - 1, parseInt(day), parseInt(hours), parseInt(minutes));
+  const dateStr = date.toLocaleDateString('es-CO', { 
+    day: 'numeric', 
+    month: 'short', 
+    year: 'numeric' 
+  });
+  const timeStr = date.toLocaleTimeString('es-CO', { 
+    hour: '2-digit', 
+    minute: '2-digit' 
+  });
+  return `${dateStr} ${timeStr}`;
 };

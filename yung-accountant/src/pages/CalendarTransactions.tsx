@@ -110,8 +110,8 @@ const CalendarTransactions: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-[#0F0F1A] overflow-hidden">
-      <div className="flex-shrink-0 p-6 pb-4">
-        <div className="flex justify-between items-center mb-5">
+      <div className="flex-shrink-0 p-6 pb-1 pt-1">
+        <div className="flex justify-between items-center mb-2">
           <div>
             <h1 className="text-2xl font-light bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent tracking-tight">
               Calendar

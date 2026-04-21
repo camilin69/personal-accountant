@@ -21,10 +21,11 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   editingTransaction,
   defaultDate,
 }) => {
-  const { categories, addTransaction, updateTransaction } = useStore();
+  const { categories, wallets, addTransaction, updateTransaction, updateWalletBalance } = useStore();
   const [amount, setAmount] = useState(0);
   const [description, setDescription] = useState('');
   const [categoryId, setCategoryId] = useState('');
+  const [walletId, setWalletId] = useState('');
   const [date, setDate] = useState(defaultDate || new Date().toISOString().split('T')[0]);
   const [error, setError] = useState<string | null>(null);
 
@@ -32,12 +33,19 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
   const incomeCategories = categories.filter(c => c.type === 'income');
   const expenseCategories = categories.filter(c => c.type === 'expense');
   
+  const walletOptions = wallets
+    .filter(w => w.isActive)
+    .map(w => ({
+      id: w.id,
+      label: `${w.icon} ${w.name}${w.lastFourDigits ? ` (****${w.lastFourDigits})` : ''}`,
+      icon: w.icon,
+      color: w.color,
+    }));
+  
   const categoryOptions = [
-    // Income section header
     ...(incomeCategories.length > 0 
       ? [{ id: 'income-sep', label: '━━━ INCOME ━━━', icon: '💰', disabled: true }] 
       : []),
-    // Income categories
     ...incomeCategories.map(cat => ({ 
       id: cat.id, 
       label: cat.name, 
@@ -45,11 +53,9 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       color: cat.color,
       disabled: false 
     })),
-    // Expense section header
     ...(expenseCategories.length > 0 
       ? [{ id: 'expense-sep', label: '━━━ EXPENSES ━━━', icon: '💸', disabled: true }] 
       : []),
-    // Expense categories
     ...expenseCategories.map(cat => ({ 
       id: cat.id, 
       label: cat.name, 
@@ -65,23 +71,29 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       setAmount(0);
       setDescription('');
       setCategoryId('');
+      setWalletId('');
       setDate(defaultDate || new Date().toISOString().split('T')[0]);
       setError(null);
     } else if (editingTransaction) {
       setAmount(editingTransaction.amount);
       setDescription(editingTransaction.description);
       setCategoryId(editingTransaction.categoryId);
+      setWalletId(editingTransaction.walletId || '');
       setDate(editingTransaction.date);
       setError(null);
     } else {
       setAmount(0);
       setDescription('');
+      setWalletId('');
       setError(null);
       const defaultCategory = categories.find(c => c.type === 'expense');
       setCategoryId(defaultCategory?.id || '');
+      // Seleccionar primera wallet activa por defecto
+      const defaultWallet = wallets.find(w => w.isActive);
+      setWalletId(defaultWallet?.id || '');
       setDate(defaultDate || new Date().toISOString().split('T')[0]);
     }
-  }, [isOpen, editingTransaction, categories, defaultDate]);
+  }, [isOpen, editingTransaction, categories, wallets, defaultDate]);
 
   const validateAmount = (value: number): boolean => {
     if (value <= 0) {
@@ -98,19 +110,40 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
       setError('Please select a category');
       return;
     }
+    if (!walletId) {
+      setError('Please select a wallet');
+      return;
+    }
+
+    const category = categories.find(c => c.id === categoryId);
+    const isIncome = category?.type === 'income';
 
     if (editingTransaction) {
+      // Revertir el balance anterior antes de actualizar
+      const oldTransaction = editingTransaction;
+      const oldCategory = categories.find(c => c.id === oldTransaction.categoryId);
+      const oldIsIncome = oldCategory?.type === 'income';
+      
+      // Revertir balance anterior
+      updateWalletBalance(oldTransaction.walletId, oldTransaction.amount, oldIsIncome);
+      
+      // Aplicar nuevo balance
+      updateWalletBalance(walletId, amount, isIncome);
+      
       updateTransaction(editingTransaction.id, {
         amount,
         description,
         categoryId,
+        walletId,
         date,
       });
     } else {
+      updateWalletBalance(walletId, amount, isIncome);
       addTransaction({
         amount,
         description,
         categoryId,
+        walletId,
         date,
         tags: [],
       });
@@ -141,30 +174,43 @@ const TransactionModal: React.FC<TransactionModalProps> = ({
 
         <div className="p-5 space-y-5">
           {/* Amount */}
-          <div>
-            <label className="block text-xs text-white/40 mb-1.5 font-light">Amount *</label>
-            <NumberInput
-              value={amount}
-              onChange={setAmount}
-              placeholder="0"
-              min={1}
-              showPreview
-              previewLabel="Amount"
-            />
-          </div>
+          <NumberInput
+            label="Amount"
+            value={amount}
+            onChange={setAmount}
+            placeholder="0"
+            min={1}
+            required
+            error={error && !amount ? error : undefined}
+            showPreview
+            previewLabel="Amount"
+          />
 
           {/* Category */}
-          <div>
-            <label className="block text-xs text-white/40 mb-1.5 font-light">Category *</label>
-            <CustomSelect
-              value={categoryId}
-              onChange={(value) => {
-                setCategoryId(value);
-              }}
-              options={categoryOptions}
-              placeholder="Select a category"
-            />
-          </div>
+          <CustomSelect
+            label="Category"
+            value={categoryId}
+            onChange={(value) => {
+              setCategoryId(value);
+              setError(null);
+            }}
+            options={categoryOptions}
+            placeholder="Select a category"
+            required
+          />
+
+          {/* Wallet */}
+          <CustomSelect
+            label="Wallet"
+            value={walletId}
+            onChange={(value) => {
+              setWalletId(value);
+              setError(null);
+            }}
+            options={walletOptions}
+            placeholder="Select a wallet"
+            required
+          />
 
           {/* Description */}
           <div>

@@ -1,7 +1,7 @@
 // components/modals/GoalDetailModal.tsx
 
 import React, { useState, useEffect } from 'react';
-import { useStore } from '../../store/useStore';
+import { useStore, useAvailableBalance } from '../../store/useStore';
 import { formatCurrency, formatDate } from '../../utils/formatters';
 import NumberInput from '../common/NumberInput';
 import ConfettiEffect from '../common/ConfettiEffect';
@@ -19,7 +19,6 @@ import {
   Edit2,
   Trash2,
   ArrowLeft,
-  CheckCircle,
   Lock
 } from 'lucide-react';
 
@@ -38,7 +37,9 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
   onEdit,
   onDelete,
 }) => {
-  const { goals, updateGoalAmount, addGoalTransaction, updateGoal } = useStore();
+  const { goals, categories, wallets, updateGoalAmount, addGoalTransaction, updateGoal, addTransaction, updateWalletBalance } = useStore();
+  const availableBalance = useAvailableBalance();
+  
   const [showAddForm, setShowAddForm] = useState(false);
   const [showRemoveForm, setShowRemoveForm] = useState(false);
   const [addAmount, setAddAmount] = useState(0);
@@ -76,7 +77,7 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
   const remaining = goal.targetAmount - goal.currentAmount;
   const maxAdd = remaining;
   const maxRemove = goal.currentAmount;
-  const willComplete = addAmount >= remaining;
+  const willComplete = (goal.currentAmount + addAmount) >= goal.targetAmount;
 
   const priorityColor = goal.priority === 'high' ? 'text-red-500/80 bg-red-500/10' : 
                        goal.priority === 'medium' ? 'text-yellow-500/80 bg-yellow-500/10' : 
@@ -89,6 +90,11 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
     }
     if (amount > maxAdd) {
       setAddError(`Cannot exceed goal target. Max: ${formatCurrency(maxAdd)}`);
+      return false;
+    }
+    // Validación contra available balance
+    if (amount > availableBalance) {
+      setAddError(`Insufficient available balance. You have ${formatCurrency(availableBalance)} available.`);
       return false;
     }
     setAddError(null);
@@ -108,27 +114,18 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
     return true;
   };
 
-  const handleAddClick = () => {
-    if (!validateAddAmount(addAmount)) return;
-    
-    if (willComplete) {
-      // Guardar datos pendientes y mostrar modal de confirmación
-      setPendingAddAmount(addAmount);
-      setPendingNote(note);
-      setShowCompleteConfirm(true);
-    } else {
-      executeAddFunds();
-    }
-  };
-
-  const executeAddFunds = () => {
+  // Ejecutar la adición de fondos y completar la meta (con transacción automática)
+  const executeAddFundsAndComplete = () => {
     const amountToAdd = pendingAddAmount || addAmount;
     const noteToUse = pendingNote || note;
     
     const newAmount = goal.currentAmount + amountToAdd;
     const willCompleteNow = newAmount >= goal.targetAmount;
     
+    // Actualizar el monto de la meta
     updateGoalAmount(goal.id, newAmount);
+    
+    // Registrar la transacción interna
     addGoalTransaction(goal.id, {
       goalId: goal.id,
       amount: amountToAdd,
@@ -138,11 +135,40 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
     });
     
     if (willCompleteNow) {
-      updateGoal(goal.id, { status: 'completed'});
+      // Buscar la categoría de compra guardada en la meta
+      const purchaseCategoryId = goal.purchaseCategoryId;
+      const category = categories.find(c => c.id === purchaseCategoryId);
+      
+      if (category) {
+        const defaultWallet = wallets.find(w => w.isActive);
+
+        // Crear la transacción de gasto AUTOMÁTICAMENTE
+        if(defaultWallet) {
+          addTransaction({
+            amount: newAmount,
+            categoryId: category.id,
+            walletId: defaultWallet.id,
+            description: `Purchase: ${goal.name}`,
+            date: new Date().toISOString().split('T')[0],
+            tags: ['goal', 'purchase'],
+          });
+          updateWalletBalance(defaultWallet.id, newAmount, false);
+        } else {
+          setToastMessage('No active wallet found. Please create a wallet first.');
+          setToastType('error');
+          setShowToast(true);
+          return;
+        }
+      }
+      
+      // Marcar la meta como completada
+      updateGoal(goal.id, { status: 'completed' });
       setShowConfetti(true);
-      setToastMessage(`🎉 Congratulations! You completed "${goal.name}"! 🎉`);
+      setToastMessage(`🎉 Congratulations! You completed and purchased "${goal.name}"!`);
       setToastType('success');
       setShowToast(true);
+      
+      // Cerrar el modal después de 2 segundos
       setTimeout(() => {
         onClose();
       }, 2000);
@@ -159,6 +185,27 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
     setPendingNote('');
   };
 
+  // Manejar el clic en "Add Funds"
+  const handleAddFunds = () => {
+    if (!validateAddAmount(addAmount)) return;
+    
+    if (willComplete) {
+      // Guardar datos pendientes y mostrar modal de confirmación
+      setPendingAddAmount(addAmount);
+      setPendingNote(note);
+      setShowCompleteConfirm(true);
+    } else {
+      executeAddFundsAndComplete();
+    }
+  };
+
+  // Manejar la confirmación de completar la meta
+  const handleConfirmComplete = () => {
+    executeAddFundsAndComplete();
+    setShowCompleteConfirm(false);
+  };
+
+  // Manejar la eliminación de fondos
   const handleRemoveFunds = () => {
     if (!validateRemoveAmount(removeAmount)) return;
     
@@ -205,12 +252,11 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
               <div>
                 <h3 className="text-lg font-light text-white">{goal.name}</h3>
                 <p className="text-xs text-white/40 mt-0.5 font-light">
-                  {isCompleted ? 'Completed Goal (Read Only)' : 'Goal details & history'}
+                  {isCompleted ? 'Completed Goal' : 'Goal details & history'}
                 </p>
               </div>
             </div>
             <div className="flex gap-2">
-              {/* Solo mostrar botón de editar si NO está completada */}
               {!isCompleted && (
                 <button onClick={onEdit} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
                   <Edit2 className="w-4 h-4 text-white/60" />
@@ -243,6 +289,19 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
                 <p className="text-lg font-light text-green-500">{formatCurrency(goal.currentAmount)}</p>
               </div>
             </div>
+
+            {/* Available Balance Info */}
+            {!isCompleted && (
+              <div className="mb-4 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                <div className="flex justify-between text-sm">
+                  <span className="text-white/40">Available Balance</span>
+                  <span className="text-[#6366F1] font-light">{formatCurrency(availableBalance)}</span>
+                </div>
+                <p className="text-[9px] text-white/30 mt-1">
+                  Money you can allocate to goals
+                </p>
+              </div>
+            )}
 
             {/* Progress Bar */}
             <div className="mb-6">
@@ -286,7 +345,7 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
               )}
             </div>
 
-            {/* Action Buttons - Solo si NO está completada */}
+            {/* Action Buttons */}
             {!isCompleted && (
               <div className="flex gap-3 mb-8">
                 {!showAddForm && !showRemoveForm && (
@@ -324,8 +383,8 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
                     <NumberInput
                       value={addAmount}
                       onChange={setAddAmount}
-                      placeholder={`Max: ${formatCurrency(maxAdd)}`}
-                      max={maxAdd}
+                      placeholder={`Max: ${formatCurrency(Math.min(maxAdd, availableBalance))}`}
+                      max={Math.min(maxAdd, availableBalance)}
                       min={1}
                       showPreview
                       previewLabel="You are adding"
@@ -338,7 +397,7 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
                       className="w-full px-4 py-2 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50"
                     />
                     <div className="flex gap-2">
-                      <button onClick={handleAddClick} className="flex-1 py-2 bg-green-500/20 text-green-500 rounded-lg text-sm font-light hover:bg-green-500/30 transition-all">
+                      <button onClick={handleAddFunds} className="flex-1 py-2 bg-green-500/20 text-green-500 rounded-lg text-sm font-light hover:bg-green-500/30 transition-all">
                         Confirm
                       </button>
                       <button onClick={() => { setShowAddForm(false); setAddAmount(0); setNote(''); setAddError(null); }} className="flex-1 py-2 bg-white/5 text-white/60 rounded-lg text-sm font-light hover:bg-white/10 transition-all">
@@ -448,7 +507,7 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
           setShowDeleteConfirm(false);
         }}
         title="Delete Goal"
-        message={`Are you sure you want to delete "${goal.name}"? This action cannot be undone and all associated transactions will be lost.`}
+        message={`Are you sure you want to delete "${goal.name}"? This action cannot be undone.`}
         confirmText="Delete"
         type="danger"
       />
@@ -461,7 +520,7 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
           setPendingAddAmount(0);
           setPendingNote('');
         }}
-        onConfirm={executeAddFunds}
+        onConfirm={handleConfirmComplete}
         goalName={goal.name}
       />
 

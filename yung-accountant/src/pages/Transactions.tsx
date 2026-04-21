@@ -16,9 +16,15 @@ import {
   Filter,
   ArrowUpDown,
   Calendar as CalendarIcon,
-  Sparkles
+  Sparkles,
+  Trash2,
+  Edit2,
+  Eye,
+  FileText
 } from 'lucide-react';
 import TransactionModal from '../components/modals/TransactionModal';
+import ConfirmModal from '../components/common/ConfirmModal';
+import ToastNotification from '../components/common/ToastNotification';
 
 const Transactions: React.FC = () => {
   const [searchParams] = useSearchParams();
@@ -30,8 +36,15 @@ const Transactions: React.FC = () => {
   const [sortOrder, setSortOrder] = useState<'asc' | 'desc'>('desc');
   const [currentPage, setCurrentPage] = useState(1);
   const [showTransactionModal, setShowTransactionModal] = useState(false);
+  const [showDetailModal, setShowDetailModal] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   const [editingTransaction, setEditingTransaction] = useState<any>(null);
+  const [selectedTransaction, setSelectedTransaction] = useState<any>(null);
+  const [transactionToDelete, setTransactionToDelete] = useState<string | null>(null);
   const [showFilters, setShowFilters] = useState(false);
+  const [showToast, setShowToast] = useState(false);
+  const [toastMessage, setToastMessage] = useState('');
+  const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
   const itemsPerPage = 10;
 
   useEffect(() => {
@@ -100,14 +113,39 @@ const Transactions: React.FC = () => {
     count: transactions.length,
   };
 
-  const handleDelete = (id: string) => {
-    if (window.confirm('Delete this transaction?')) {
-      deleteTransaction(id);
+  const handleDeleteClick = (id: string, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setTransactionToDelete(id);
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (transactionToDelete) {
+      deleteTransaction(transactionToDelete);
+      setToastMessage('Transaction deleted successfully');
+      setToastType('success');
+      setShowToast(true);
+      setTransactionToDelete(null);
+      setShowDetailModal(false);
     }
+    setShowDeleteConfirm(false);
+  };
+
+  const handleViewDetails = (transaction: any) => {
+    setSelectedTransaction(transaction);
+    setShowDetailModal(true);
+  };
+
+  const handleEdit = (transaction: any, e: React.MouseEvent) => {
+    e.stopPropagation();
+    setEditingTransaction(transaction);
+    setShowTransactionModal(true);
   };
 
   const incomeCategories = categories.filter(c => c.type === 'income');
   const expenseCategories = categories.filter(c => c.type === 'expense');
+
+  const selectedTransactionDetails = selectedTransaction ? getCategoryById(selectedTransaction.categoryId) : null;
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -295,7 +333,11 @@ const Transactions: React.FC = () => {
                 const cat = getCategoryById(t.categoryId);
                 if (!cat) return null;
                 return (
-                  <tr key={t.id} className="border-b border-white/5 hover:bg-white/5 transition-colors duration-200 group">
+                  <tr 
+                    key={t.id} 
+                    onClick={() => handleViewDetails(t)}
+                    className="border-b border-white/5 hover:bg-white/5 transition-colors duration-200 group cursor-pointer"
+                  >
                     <td className="p-4 text-sm text-white/60 font-light">
                       <div className="flex items-center gap-2">
                         <CalendarIcon className="w-3.5 h-3.5 text-white/30" />
@@ -318,25 +360,18 @@ const Transactions: React.FC = () => {
                       {cat.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
                     </td>
                     <td className="p-4 text-center">
-                      <div className="flex items-center justify-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity duration-200">
+                      <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
-                          onClick={() => {
-                            setEditingTransaction(t);
-                            setShowTransactionModal(true);
-                          }}
-                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors"
+                          onClick={(e) => handleEdit(t, e)}
+                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M15.232 5.232l3.536 3.536m-2.036-5.036a2.5 2.5 0 113.536 3.536L6.5 21.036H3v-3.572L16.732 3.732z" />
-                          </svg>
+                          <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
-                          onClick={() => handleDelete(t.id)}
-                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-red-500 transition-colors"
+                          onClick={(e) => handleDeleteClick(t.id, e)}
+                          className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
                         >
-                          <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-                          </svg>
+                          <Trash2 className="w-3.5 h-3.5" />
                         </button>
                       </div>
                     </td>
@@ -418,6 +453,73 @@ const Transactions: React.FC = () => {
         )}
       </div>
 
+      {/* Transaction Detail Modal */}
+      {showDetailModal && selectedTransaction && selectedTransactionDetails && (
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
+          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md">
+            <div className="flex justify-between items-center p-5 border-b border-white/10">
+              <h3 className="text-lg font-light text-white">Transaction Details</h3>
+              <button onClick={() => setShowDetailModal(false)} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                <X className="w-5 h-5 text-white/60" />
+              </button>
+            </div>
+            <div className="p-5 space-y-4">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-white/40">Amount</p>
+                  <p className={`text-xl font-light ${selectedTransactionDetails.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                    {selectedTransactionDetails.type === 'income' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-[10px] text-white/40">Date</p>
+                  <p className="text-sm font-light text-white/80">{formatDate(selectedTransaction.date, 'long')}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${selectedTransactionDetails.color}20` }}>
+                  {selectedTransactionDetails.icon}
+                </div>
+                <div>
+                  <p className="text-[10px] text-white/40">Category</p>
+                  <p className="text-sm font-light text-white/80">{selectedTransactionDetails.name}</p>
+                </div>
+              </div>
+              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                <FileText className="w-4 h-4 text-white/40" />
+                <div>
+                  <p className="text-[10px] text-white/40">Description</p>
+                  <p className="text-sm font-light text-white/80">{selectedTransaction.description || '-'}</p>
+                </div>
+              </div>
+            </div>
+            <div className="flex gap-3 p-5 border-t border-white/10">
+              <button
+                onClick={() => {
+                  setShowDetailModal(false);
+                  setEditingTransaction(selectedTransaction);
+                  setShowTransactionModal(true);
+                }}
+                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/80 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <Edit2 className="w-4 h-4" />
+                Edit
+              </button>
+              <button
+                onClick={() => {
+                  setShowDetailModal(false);
+                  handleDeleteClick(selectedTransaction.id, {} as React.MouseEvent);
+                }}
+                className="flex-1 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-500 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
+              >
+                <Trash2 className="w-4 h-4" />
+                Delete
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Transaction Modal */}
       <TransactionModal
         isOpen={showTransactionModal}
@@ -430,6 +532,25 @@ const Transactions: React.FC = () => {
           setEditingTransaction(null);
         }}
         editingTransaction={editingTransaction}
+      />
+
+      {/* Confirm Delete Modal */}
+      <ConfirmModal
+        isOpen={showDeleteConfirm}
+        onClose={() => setShowDeleteConfirm(false)}
+        onConfirm={confirmDelete}
+        title="Delete Transaction"
+        message="Are you sure you want to delete this transaction? This action cannot be undone."
+        confirmText="Delete"
+        type="danger"
+      />
+
+      {/* Toast Notification */}
+      <ToastNotification
+        isOpen={showToast}
+        onClose={() => setShowToast(false)}
+        message={toastMessage}
+        type={toastType}
       />
     </div>
   );
