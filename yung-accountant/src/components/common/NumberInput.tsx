@@ -19,6 +19,8 @@ interface NumberInputProps {
   className?: string;
 }
 
+const MAX_AMOUNT = 100_000_000_000; // 100 mil millones
+
 const NumberInput: React.FC<NumberInputProps> = ({
   value,
   onChange,
@@ -41,15 +43,18 @@ const NumberInput: React.FC<NumberInputProps> = ({
 
   const error = externalError || internalError;
 
+  // Determinar el máximo permitido (el menor entre el max prop y MAX_AMOUNT)
+  const effectiveMax = max ? Math.min(max, MAX_AMOUNT) : MAX_AMOUNT;
+
   useEffect(() => {
-    if (!isFocused) {
-      if (value > 0) {
-        setDisplayValue(formatInputNumber(value.toString()));
-      } else {
-        setDisplayValue('');
-      }
+    // Siempre actualizar el displayValue cuando cambia la prop value
+    // Esto asegura que el input muestre el valor correcto incluso si está enfocado
+    if (value > 0) {
+      setDisplayValue(formatInputNumber(value.toString()));
+    } else {
+      setDisplayValue('');
     }
-  }, [value, isFocused]);
+  }, [value]);
 
   const handleChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const rawValue = e.target.value;
@@ -61,31 +66,54 @@ const NumberInput: React.FC<NumberInputProps> = ({
       return;
     }
     
+    // Validar que no exceda el máximo global antes de formatear
+    const cleanNumber = rawValue.replace(/\./g, '');
+    if (cleanNumber.length > 0) {
+      const numericValue = parseInt(cleanNumber, 10);
+      if (numericValue > effectiveMax) {
+        setInternalError(`Maximum amount allowed: ${formatCurrency(effectiveMax)}`);
+        onChange(effectiveMax);
+        setDisplayValue(formatInputNumber(effectiveMax.toString()));
+        setTimeout(() => setInternalError(null), 2000);
+        return;
+      }
+    }
+    
     const formatted = formatInputNumber(rawValue);
     setDisplayValue(formatted);
     
     const numValue = parseDottedNumber(formatted);
     
     if (numValue > 0) {
-      if (max !== undefined && numValue > max) {
-        setInternalError(`Maximum allowed: ${formatCurrency(max)}`);
-        onChange(max);
-        setDisplayValue(formatInputNumber(max.toString()));
+      // Validar contra el máximo global nuevamente
+      if (numValue > effectiveMax) {
+        setInternalError(`Maximum amount allowed: ${formatCurrency(effectiveMax)}`);
+        onChange(effectiveMax);
+        setDisplayValue(formatInputNumber(effectiveMax.toString()));
         setTimeout(() => setInternalError(null), 2000);
         return;
       }
       
-      if (min !== undefined && numValue < min) {
-        setInternalError(`Minimum allowed: ${formatCurrency(min)}`);
-        onChange(min);
-        setDisplayValue(formatInputNumber(min.toString()));
-        setTimeout(() => setInternalError(null), 2000);
-        return;
-      }
+      // NO validar min aquí - dejar que el usuario escriba libremente
+      // La validación de min se hará en el blur o en el componente padre
     }
     
     setInternalError(null);
     onChange(numValue);
+  };
+
+  const handleBlur = () => {
+    setIsFocused(false);
+    
+    const numValue = parseDottedNumber(displayValue);
+    
+    // Validar min solo cuando el campo pierde el foco
+    if (numValue > 0 && min !== undefined && numValue < min) {
+      setInternalError(`Minimum allowed: ${formatCurrency(min)}`);
+      onChange(min);
+      setDisplayValue(formatInputNumber(min.toString()));
+      setTimeout(() => setInternalError(null), 2000);
+    }
   };
 
   return (
@@ -101,7 +129,7 @@ const NumberInput: React.FC<NumberInputProps> = ({
         value={displayValue}
         onChange={handleChange}
         onFocus={() => setIsFocused(true)}
-        onBlur={() => setIsFocused(false)}
+        onBlur={handleBlur}
         placeholder={placeholder}
         disabled={disabled}
         required={required}
@@ -118,6 +146,12 @@ const NumberInput: React.FC<NumberInputProps> = ({
       {showPreview && value > 0 && !error && (
         <p className="text-[10px] text-white/30">
           {previewLabel}: {formatCurrency(value)}
+        </p>
+      )}
+      {/* Indicador del límite máximo */}
+      {!error && (
+        <p className="text-[8px] text-white/20 font-light">
+          Max: {formatCurrency(effectiveMax)}
         </p>
       )}
     </div>

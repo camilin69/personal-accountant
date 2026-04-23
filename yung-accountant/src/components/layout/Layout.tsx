@@ -1,31 +1,24 @@
-// components/layout/Layout.tsx
-
 import React, { useEffect, useRef, useState } from 'react';
 import { Outlet, useLocation } from 'react-router-dom';
 import Navbar from './Navbar';
 import Sidebar from './Sidebar';
+import { useMediaQuery } from '../../hooks/useMediaQuery';
 
 const Layout: React.FC = () => {
   const location = useLocation();
   const mainContentRef = useRef<HTMLDivElement>(null);
+  const isDesktop = useMediaQuery('(min-width: 1024px)');
   const [isMobileMenuOpen, setIsMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     if (mainContentRef.current) {
       mainContentRef.current.scrollTop = 0;
     }
-    setIsMobileMenuOpen(false);
-  }, [location.pathname]);
-
-  useEffect(() => {
-    const handleResize = () => {
-      if (window.innerWidth >= 1024) {
-        setIsMobileMenuOpen(false);
-      }
-    };
-    window.addEventListener('resize', handleResize);
-    return () => window.removeEventListener('resize', handleResize);
-  }, []);
+    // Cerrar menú al cambiar de página en móvil
+    if (!isDesktop) {
+      setIsMobileMenuOpen(false);
+    }
+  }, [location.pathname, isDesktop]);
 
   const toggleMobileMenu = () => setIsMobileMenuOpen(!isMobileMenuOpen);
   const closeMobileMenu = () => setIsMobileMenuOpen(false);
@@ -34,24 +27,21 @@ const Layout: React.FC = () => {
     <div className="h-screen flex flex-col bg-[#0F0F1A] overflow-hidden">
       <Navbar onMobileMenuClick={toggleMobileMenu} />
       <div className="flex flex-1 overflow-hidden pt-[64px] relative">
-        {/* Sidebar - Desktop: siempre visible, Mobile: slide desde izquierda */}
         <div className={`
           fixed lg:relative inset-y-0 left-0 z-40
           transform transition-transform duration-300 ease-in-out
           ${isMobileMenuOpen ? 'translate-x-0' : '-translate-x-full lg:translate-x-0'}
         `}>
-          <Sidebar onCloseMobile={closeMobileMenu} />
+          <Sidebar isMobileOpen={isMobileMenuOpen} onCloseMobile={closeMobileMenu} />
         </div>
         
-        {/* Overlay para móvil */}
-        {isMobileMenuOpen && (
+        {isMobileMenuOpen && !isDesktop && (
           <div 
-            className="fixed inset-0 bg-black/50 z-30 lg:hidden"
+            className="fixed inset-0 bg-black/60 backdrop-blur-sm z-30"
             onClick={closeMobileMenu}
           />
         )}
         
-        {/* Main Content */}
         <main 
           ref={mainContentRef}
           className="flex-1 overflow-y-auto bg-[#0F0F1A] w-full"

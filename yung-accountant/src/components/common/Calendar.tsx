@@ -6,7 +6,7 @@ import { formatCurrency } from '../../utils/formatters';
 
 const monthNames = ['Enero', 'Febrero', 'Marzo', 'Abril', 'Mayo', 'Junio', 'Julio', 'Agosto', 'Septiembre', 'Octubre', 'Noviembre', 'Diciembre'];
 const weekDays = ['LUN', 'MAR', 'MIÉ', 'JUE', 'VIE', 'SÁB', 'DOM'];
-const weekDaysShort = ['L', 'M', 'M', 'J', 'V', 'S', 'D'];
+const weekDaysShort = ['L', 'M', 'MM', 'J', 'V', 'S', 'D'];
 
 interface CalendarProps {
   transactions: any[];

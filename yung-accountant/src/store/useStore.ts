@@ -16,10 +16,6 @@ const defaultCategories: Category[] = [
   { id: '6', userId: '1', name: 'Weed', type: 'expense', icon: '🌿', color: '#14B8A6', isDefault: true, createdAt: new Date().toISOString() },
   { id: '7', userId: '1', name: 'Entertainment', type: 'expense', icon: '🎮', color: '#A855F7', isDefault: true, createdAt: new Date().toISOString() },
   { id: '8', userId: '1', name: 'Savings', type: 'expense', icon: '💰', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '9', userId: '1', name: 'Health', type: 'expense', icon: '💪', color: '#EC4899', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '10', userId: '1', name: 'Education', type: 'expense', icon: '📚', color: '#6366F1', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '11', userId: '1', name: 'Rent', type: 'expense', icon: '🏠', color: '#FF6584', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '12', userId: '1', name: 'Utilities', type: 'expense', icon: '⚡', color: '#F59E0B', isDefault: true, createdAt: new Date().toISOString() },
 ];
 
 export const useStore = create<StoreState>()(
@@ -190,23 +186,20 @@ export const useStore = create<StoreState>()(
         get().updateAllWalletBalances();
       },
 
-
       deleteTransaction: (id) => {
         const transaction = get().transactions.find(t => t.id === id);
         
+        // ==================== MANEJO DE DEUDAS ====================
         // Verificar si es una transacción de deuda (creación de deuda)
         if (transaction?.tags.includes('debt') && !transaction?.tags.includes('debt-payment')) {
           const debtId = transaction.tags.find(tag => tag !== 'debt' && tag !== id && !tag.includes('debt-payment'));
           if (debtId) {
             const debt = get().debts.find(d => d.id === debtId);
             if (debt) {
-              
               set((state) => ({
                 debts: state.debts.filter(d => d.id !== debtId),
                 transactions: state.transactions.filter(t => !t.tags.includes(debtId))
               }));
-              
-              // Actualizar balances después de eliminar
               get().updateAllWalletBalances();
               return;
             }
@@ -231,23 +224,25 @@ export const useStore = create<StoreState>()(
                     d.id === debtId
                       ? { ...d, payments: updatedPayments, remainingBalance: newRemainingBalance }
                       : d
-                  )
-                }));
+                )
+              }));
               }
             }
           }
         }
         
+        // LOS GOALS NO SE AFECTAN - Las transacciones de goals NO existen en transactions
+        // Solo las transacciones de compra (purchase) tienen tag 'goal'
+        // Esas sí deben eliminarse normalmente
+        
+        // Eliminar la transacción
         set((state) => ({
           transactions: state.transactions.filter((t) => t.id !== id),
         }));
         
-        // Actualizar todos los balances de wallets
+        // Actualizar balances de wallets
         get().updateAllWalletBalances();
       },
-
-
-
 
       // ==================== WALLET ACTIONS ====================
       addWallet: (wallet) => {
@@ -348,8 +343,13 @@ export const useStore = create<StoreState>()(
         }));
       },
 
-      addGoalTransaction: (goalId: string, transaction: Omit<GoalTransaction, 'id'>) => {
-        const newTransaction: GoalTransaction = { ...transaction, id: generateId(), goalId };
+      addGoalTransaction: (goalId: string, transaction: Omit<GoalTransaction, 'id' | 'goalId'>) => {
+        const newTransaction: GoalTransaction = { 
+          ...transaction, 
+          id: generateId(), 
+          goalId,
+          walletId: transaction.walletId,
+        };
         set((state) => ({
           goals: state.goals.map(g => 
             g.id === goalId 
@@ -358,6 +358,7 @@ export const useStore = create<StoreState>()(
           )
         }));
       },
+
 
       updateGoalAmount: (goalId: string, amount: number) => {
         set((state) => ({
@@ -375,14 +376,12 @@ export const useStore = create<StoreState>()(
       // ==================== DEBT ACTIONS ====================
       addDebt: (debt: Omit<Debt, 'id' | 'userId' | 'createdAt' | 'remainingBalance' | 'payments'>) => {
         const category = get().categories.find(c => c.id === debt.categoryId);
-        const isIncome = debt.type === 'borrowed';
         const isExpense = debt.type === 'lent';
         
         // Validar balance si es un préstamo que hago (lent - gasto)
         if (isExpense) {
           const currentBalance = get().calculateWalletBalance(debt.walletId, get().transactions, get().categories);
           if (currentBalance < debt.originalAmount) {
-            // No crear la deuda, solo mostrar error
             return;
           }
         }
@@ -410,39 +409,63 @@ export const useStore = create<StoreState>()(
           tags: ['debt', debt.type, newDebt.id, transactionId],
         };
         
-        // Actualizar wallet balance
-        get().updateWalletBalance(debt.walletId, debt.originalAmount, isIncome);
-        
         set((state) => ({ 
           debts: [...state.debts, newDebt],
           transactions: [newTransaction, ...state.transactions]
         }));
         
-        // Actualizar balances después de añadir
+        // Actualizar balances después de añadir (esto recalculará todo correctamente)
         get().updateAllWalletBalances();
       },
-
-
-
+      
       updateDebt: (id, updates) => {
         const oldDebt = get().debts.find(d => d.id === id);
         if (!oldDebt) return;
+
+        // Crear una copia de updates para no mutar el original
+        const finalUpdates = { ...updates };
         
+        // Calcular el total de pagos realizados
+        const totalPaymentsMade = (oldDebt.payments || []).reduce((sum, p) => sum + p.amount, 0);
+        
+        // ==================== VALIDACIÓN DE COMPLETADO ====================
+        // Verificar si la deuda se está completando por edición
+        const isBeingCompletedByEdit = 
+          finalUpdates.originalAmount !== undefined && 
+          finalUpdates.originalAmount <= totalPaymentsMade &&
+          finalUpdates.originalAmount !== oldDebt.originalAmount;
+        
+        // Verificar si la deuda ya está pagada (remainingBalance === 0)
+        const isAlreadyPaid = oldDebt.remainingBalance === 0;
+        
+        // Si se está completando por edición, marcar como paid y ajustar remainingBalance
+        if (isBeingCompletedByEdit && !isAlreadyPaid) {
+          finalUpdates.status = 'paid';
+          // El remainingBalance se ajustará después basado en los pagos
+        }
+        
+        // Verificar si se está enviando explícitamente status 'paid'
+        if (finalUpdates.status === 'paid' && !isAlreadyPaid) {
+          finalUpdates.status = 'paid';
+        }
+        
+        // ==================== VALIDACIONES DE TIPO Y MONTO ====================
         // Verificar si cambió el tipo (borrowed ↔ lent)
-        const typeChanged = updates.type !== undefined && updates.type !== oldDebt.type;
-        const amountChanged = updates.originalAmount !== undefined && updates.originalAmount !== oldDebt.originalAmount;
-        const categoryChanged = updates.categoryId !== undefined && updates.categoryId !== oldDebt.categoryId;
+        const typeChanged = finalUpdates.type !== undefined && finalUpdates.type !== oldDebt.type;
+        const amountChanged = finalUpdates.originalAmount !== undefined && finalUpdates.originalAmount !== oldDebt.originalAmount;
+        const categoryChanged = finalUpdates.categoryId !== undefined && finalUpdates.categoryId !== oldDebt.categoryId;
         
         // Si cambió el tipo, necesitamos validar el balance para el nuevo tipo
         if (typeChanged) {
-          const newType = updates.type;
-          const newAmount = updates.originalAmount !== undefined ? updates.originalAmount : oldDebt.originalAmount;
-          const walletId = updates.walletId !== undefined ? updates.walletId : oldDebt.walletId;
+          const newType = finalUpdates.type;
+          const newAmount = finalUpdates.originalAmount !== undefined ? finalUpdates.originalAmount : oldDebt.originalAmount;
+          const walletId = finalUpdates.walletId !== undefined ? finalUpdates.walletId : oldDebt.walletId;
           
           // Si el nuevo tipo es 'lent' (préstamo que hago), validar balance suficiente
           if (newType === 'lent') {
             const currentBalance = get().calculateWalletBalance(walletId, get().transactions, get().categories);
             if (currentBalance < newAmount) {
+              console.log('Insufficient balance for lent conversion');
               return;
             }
           }
@@ -450,32 +473,51 @@ export const useStore = create<StoreState>()(
         
         // Si cambió el monto y el tipo actual es 'lent', validar balance
         if (amountChanged && oldDebt.type === 'lent') {
-          const newAmount = updates.originalAmount!;
+          const newAmount = finalUpdates.originalAmount!;
           const currentBalance = get().calculateWalletBalance(oldDebt.walletId, get().transactions, get().categories);
           if (currentBalance < newAmount) {
+            console.log('Insufficient balance for lent amount increase');
             return;
           }
         }
         
-        // Calcular diferencia de monto para remaining balance
-        let amountDifference = 0;
+        // Calcular el nuevo remainingBalance
+        let newRemainingBalance = oldDebt.remainingBalance;
+        
         if (amountChanged) {
-          amountDifference = updates.originalAmount! - oldDebt.originalAmount;
+          const amountDifference = finalUpdates.originalAmount! - oldDebt.originalAmount;
+          newRemainingBalance = oldDebt.remainingBalance + amountDifference;
         }
         
-        // Actualizar la deuda
+        // Si la deuda se está completando por edición, ajustar remainingBalance a 0
+        if (isBeingCompletedByEdit && !isAlreadyPaid) {
+          newRemainingBalance = 0;
+        }
+        
+        // Asegurar que remainingBalance no sea negativo
+        if (newRemainingBalance < 0) {
+          newRemainingBalance = 0;
+        }
+        
+        // Si remainingBalance es 0, el status debe ser 'paid'
+        if (newRemainingBalance === 0 && oldDebt.status !== 'paid') {
+          finalUpdates.status = 'paid';
+        }
+        
+        // ==================== ACTUALIZAR LA DEUDA ====================
         set((state) => ({
-          debts: state.debts.map((d) => (d.id === id ? { 
-            ...d, 
-            ...updates,
-            remainingBalance: amountChanged 
-              ? d.remainingBalance + amountDifference 
-              : d.remainingBalance
-          } : d)),
+          debts: state.debts.map((d) => 
+            d.id === id ? { 
+              ...d, 
+              ...finalUpdates,
+              remainingBalance: newRemainingBalance,
+            } : d
+          ),
         }));
         
         const updatedDebt = get().debts.find(d => d.id === id);
         
+        // ==================== ACTUALIZAR TRANSACCIÓN ASOCIADA ====================
         if (updatedDebt && (amountChanged || categoryChanged || typeChanged)) {
           // Buscar la transacción original asociada a esta deuda
           const relatedTransaction = get().transactions.find(t => 
@@ -483,19 +525,10 @@ export const useStore = create<StoreState>()(
           );
           
           if (relatedTransaction) {
-            const newAmount = updates.originalAmount !== undefined ? updates.originalAmount : oldDebt.originalAmount;
-            const newCategoryId = updates.categoryId !== undefined ? updates.categoryId : oldDebt.categoryId;
-            const newType = updates.type !== undefined ? updates.type : oldDebt.type;
+            const newAmount = finalUpdates.originalAmount !== undefined ? finalUpdates.originalAmount : oldDebt.originalAmount;
+            const newCategoryId = finalUpdates.categoryId !== undefined ? finalUpdates.categoryId : oldDebt.categoryId;
+            const newType = finalUpdates.type !== undefined ? finalUpdates.type : oldDebt.type;
             const newCategory = get().categories.find(c => c.id === newCategoryId);
-            
-            // Revertir el balance anterior de la transacción original
-            const oldCategory = get().categories.find(c => c.id === relatedTransaction.categoryId);
-            if (oldCategory) {
-              get().updateWalletBalance(relatedTransaction.walletId, relatedTransaction.amount, false);
-            }
-            
-            // Determinar si la nueva transacción es income o expense
-            const isIncome = newType === 'borrowed';
             
             // Actualizar la transacción existente
             get().updateTransaction(relatedTransaction.id, {
@@ -504,13 +537,9 @@ export const useStore = create<StoreState>()(
               categoryName: newCategory?.name || 'Other',
               description: `${newType === 'borrowed' ? 'Loan received from' : 'Loan given to'} ${updatedDebt.creditorName}`,
             });
-            
-            // Aplicar nuevo balance con la transacción actualizada
-            get().updateWalletBalance(relatedTransaction.walletId, newAmount, isIncome);
           }
         }
         
-        // Actualizar todos los balances de wallets
         get().updateAllWalletBalances();
       },
 
@@ -550,35 +579,61 @@ export const useStore = create<StoreState>()(
         }
       },
 
-
       addDebtPayment: (debtId: string, payment: Omit<DebtPayment, 'id' | 'debtId'>) => {
         const debt = get().debts.find(d => d.id === debtId);
         if (!debt) return;
         
-        // Validar balance suficiente para el pago
-        const currentBalance = get().calculateWalletBalance(debt.walletId, get().transactions, get().categories);
-        if (currentBalance < payment.amount) {
-          return;
+        // SOLO validar balance si es borrowed (dinero que sale de mi wallet)
+        // Para lent (dinero que recibo), no validar balance
+        if (debt.type === 'borrowed') {
+          const currentBalance = get().calculateWalletBalance(debt.walletId, get().transactions, get().categories);
+          if (currentBalance < payment.amount) {
+            console.log('Insufficient balance for debt payment');
+            return;
+          }
         }
         
         const newPayment: DebtPayment = { ...payment, id: generateId(), debtId };
         const newBalance = debt.remainingBalance - payment.amount;
         const isFullyPaid = newBalance <= 0;
         
-        let paymentCategoryId = get().categories.find(c => c.name === 'Debt Payment' && c.type === 'expense')?.id;
-        if (!paymentCategoryId) {
-          const newCategory: Category = {
-            id: 'debt-payment-default',
-            userId: get().user?.id || '1',
-            name: 'Debt Payment',
-            type: 'expense',
-            icon: '💸',
-            color: '#EF4444',
-            isDefault: true,
-            createdAt: new Date().toISOString(),
-          };
-          set((state) => ({ categories: [...state.categories, newCategory] }));
-          paymentCategoryId = newCategory.id;
+        // Determinar la categoría correcta según el tipo de deuda
+        let paymentCategoryId: string | undefined;
+        
+        if (debt.type === 'borrowed') {
+          // Para borrowed (pago de deuda que debo): es un gasto (expense)
+          paymentCategoryId = get().categories.find(c => c.name === 'Debt Payment' && c.type === 'expense')?.id;
+          if (!paymentCategoryId) {
+            const newCategory: Category = {
+              id: 'debt-payment-default',
+              userId: get().user?.id || '1',
+              name: 'Debt Payment',
+              type: 'expense',
+              icon: '💸',
+              color: '#EF4444',
+              isDefault: true,
+              createdAt: new Date().toISOString(),
+            };
+            set((state) => ({ categories: [...state.categories, newCategory] }));
+            paymentCategoryId = newCategory.id;
+          }
+        } else {
+          // Para lent (pago que recibo): es un ingreso (income)
+          paymentCategoryId = get().categories.find(c => c.name === 'Debt Collection' && c.type === 'income')?.id;
+          if (!paymentCategoryId) {
+            const newCategory: Category = {
+              id: 'debt-collection-default',
+              userId: get().user?.id || '1',
+              name: 'Debt Collection',
+              type: 'income',
+              icon: '💰',
+              color: '#10B981',
+              isDefault: true,
+              createdAt: new Date().toISOString(),
+            };
+            set((state) => ({ categories: [...state.categories, newCategory] }));
+            paymentCategoryId = newCategory.id;
+          }
         }
         
         const transactionId = generateId();
@@ -587,9 +642,11 @@ export const useStore = create<StoreState>()(
           userId: get().user?.id || '1',
           amount: payment.amount,
           categoryId: paymentCategoryId,
-          categoryName: 'Debt Payment',
+          categoryName: debt.type === 'borrowed' ? 'Debt Payment' : 'Debt Collection',
           walletId: debt.walletId,
-          description: `Payment to ${debt.creditorName}${payment.notes ? ` - ${payment.notes}` : ''}`,
+          description: debt.type === 'borrowed' 
+            ? `Payment to ${debt.creditorName}${payment.notes ? ` - ${payment.notes}` : ''}`
+            : `Payment received from ${debt.creditorName}${payment.notes ? ` - ${payment.notes}` : ''}`,
           date: payment.date,
           tags: ['debt-payment', debtId, transactionId],
         };
@@ -711,8 +768,15 @@ export const useGoalsAllocatedBalance = () => {
 export const useAvailableBalance = () => {
   const totalBalance = useTotalBalance();
   const allocatedToGoals = useGoalsAllocatedBalance();
-  return totalBalance - allocatedToGoals;
+  const { borrowed: activeDebts } = useDebtsBalance();
+  
+  // Balance real disponible después de deudas
+  const realAvailable = totalBalance - activeDebts;
+  
+  // Dinero que queda después de reservar para goals (virtual)
+  return realAvailable - allocatedToGoals;
 };
+
 
 export const useDebtsBalance = () => {
   const debts = useStore((state) => state.debts);

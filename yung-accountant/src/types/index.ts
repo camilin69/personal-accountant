@@ -72,6 +72,7 @@ export interface GoalTransaction {
   type: 'add' | 'remove';
   note: string;
   date: string;
+  walletId: string;
 }
 
 export interface BaseGoal {
@@ -95,6 +96,11 @@ export interface Goal extends BaseGoal {
 
 // types/index.ts
 
+export interface VariableInterest {
+  month: number;
+  rate: number;
+}
+
 export interface Debt {
   id: string;
   userId: string;
@@ -114,6 +120,9 @@ export interface Debt {
   notes?: string;
   payments?: DebtPayment[];
   createdAt: string;
+  realAmountToPay: number;  // monthlyPayment * termMonths (total a pagar con intereses)
+  realInterests: number;     // realAmountToPay - originalAmount (intereses reales)
+  variableInterests?: VariableInterest[]; // Lista de intereses variables por mes
 }
 
 export interface DebtPayment {

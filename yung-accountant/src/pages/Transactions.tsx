@@ -1,10 +1,10 @@
 // pages/Transactions.tsx
 
 import React, { useState, useMemo, useEffect } from 'react';
-import { useSearchParams } from 'react-router-dom';
+import { useNavigate, useSearchParams } from 'react-router-dom';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { ArrowUpDown, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Edit2, FileText, Filter, Plus, Search, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';;
+import { AlertCircle, ArrowRight, ArrowUpDown, Calendar as CalendarIcon, ChevronLeft, ChevronRight, Edit2, FileText, Filter, Plus, Search, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';;
 import TransactionModal from '../components/modals/TransactionModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import ToastNotification from '../components/common/ToastNotification';
@@ -38,6 +38,8 @@ const Transactions: React.FC = () => {
   }, [searchParams]);
 
   const getCategoryById = (id: string) => categories.find(c => c.id === id);
+
+  const getWalletById = (id: string) => wallets.find(w => w.id === id);
 
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
@@ -97,11 +99,12 @@ const Transactions: React.FC = () => {
   };
 
   const handleDeleteClick = (id: string, e: React.MouseEvent) => {
-    e.stopPropagation();
+    e.stopPropagation();    
     setTransactionToDelete(id);
     setShowDeleteConfirm(true);
   };
 
+  const navigate = useNavigate();
   const confirmDelete = () => {
     if (transactionToDelete) {
       deleteTransaction(transactionToDelete);
@@ -121,9 +124,19 @@ const Transactions: React.FC = () => {
 
   const handleEdit = (transaction: any, e: React.MouseEvent) => {
     e.stopPropagation();
+    const isDebtTransaction = transaction.tags && (transaction.tags.includes('debt') || transaction.tags.includes('debt-payment'));
+    
+    if (isDebtTransaction) {
+      setToastMessage('Debt transactions cannot be edited. Please manage them from the Debts module.');
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
+    
     setEditingTransaction(transaction);
     setShowTransactionModal(true);
   };
+
 
   const incomeCategories = categories.filter(c => c.type === 'income');
   const expenseCategories = categories.filter(c => c.type === 'expense');
@@ -305,6 +318,7 @@ const Transactions: React.FC = () => {
             <thead>
               <tr className="border-b border-white/10 bg-white/[0.02]">
                 <th className="text-left p-4 text-[10px] font-light text-white/40 uppercase tracking-wider">Date</th>
+                <th className="text-left p-4 text-[10px] font-light text-white/40 uppercase tracking-wider">Wallet</th>
                 <th className="text-left p-4 text-[10px] font-light text-white/40 uppercase tracking-wider">Category</th>
                 <th className="text-left p-4 text-[10px] font-light text-white/40 uppercase tracking-wider">Description</th>
                 <th className="text-right p-4 text-[10px] font-light text-white/40 uppercase tracking-wider">Amount</th>
@@ -314,6 +328,8 @@ const Transactions: React.FC = () => {
             <tbody>
               {paginatedTransactions.map(t => {
                 const cat = getCategoryById(t.categoryId);
+                const wallet = getWalletById(t.walletId);
+                const isDebtTransaction = t.tags && (t.tags.includes('debt') || t.tags.includes('debt-payment'));
                 if (!cat) return null;
                 return (
                   <tr 
@@ -325,6 +341,11 @@ const Transactions: React.FC = () => {
                       <div className="flex items-center gap-2">
                         <CalendarIcon className="w-3.5 h-3.5 text-white/30" />
                         {formatDate(t.date, 'short')}
+                      </div>
+                    </td>
+                    <td className="p-4 text-sm text-white/60 font-light">
+                      <div className="flex items-center gap-2">
+                        {wallet?.name}
                       </div>
                     </td>
                     <td className="p-4">
@@ -346,13 +367,25 @@ const Transactions: React.FC = () => {
                       <div className="flex items-center justify-center gap-1" onClick={(e) => e.stopPropagation()}>
                         <button
                           onClick={(e) => handleEdit(t, e)}
-                          className="p-1.5 rounded-lg hover:bg-white/10 text-white/40 hover:text-white transition-colors opacity-0 group-hover:opacity-100"
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isDebtTransaction
+                              ? 'text-white/20 cursor-not-allowed'
+                              : 'hover:bg-white/10 text-white/40 hover:text-white opacity-0 group-hover:opacity-100'
+                          }`}
+                          disabled={isDebtTransaction}
+                          title={isDebtTransaction ? 'Debt transactions cannot be edited' : 'Edit transaction'}
                         >
                           <Edit2 className="w-3.5 h-3.5" />
                         </button>
                         <button
                           onClick={(e) => handleDeleteClick(t.id, e)}
-                          className="p-1.5 rounded-lg hover:bg-red-500/20 text-white/40 hover:text-red-500 transition-colors opacity-0 group-hover:opacity-100"
+                          className={`p-1.5 rounded-lg transition-colors ${
+                            isDebtTransaction
+                              ? 'text-white/20 cursor-not-allowed'
+                              : 'hover:bg-red-500/20 text-white/40 hover:text-red-500 opacity-0 group-hover:opacity-100'
+                          }`}
+                          disabled={isDebtTransaction}
+                          title={isDebtTransaction ? 'Debt transactions cannot be deleted directly' : 'Delete transaction'}
                         >
                           <Trash2 className="w-3.5 h-3.5" />
                         </button>
@@ -438,77 +471,137 @@ const Transactions: React.FC = () => {
 
       {/* Transaction Detail Modal */}
       {showDetailModal && selectedTransaction && selectedTransactionDetails && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md">
-            <div className="flex justify-between items-center p-5 border-b border-white/10">
-              <h3 className="text-lg font-light text-white">Transaction Details</h3>
-              <button onClick={() => setShowDetailModal(false)} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                <X className="w-5 h-5 text-white/60" />
-              </button>
-            </div>
-            <div className="p-5 space-y-4">
-              <div className="flex items-center justify-between">
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md flex flex-col max-h-[85vh]">
+            {/* Header - Sticky */}
+            <div className="sticky top-0 z-10 bg-white/[0.03] backdrop-blur-xl rounded-t-xl">
+              <div className="flex justify-between items-center p-5 border-b border-white/10">
                 <div>
-                  <p className="text-[10px] text-white/40">Amount</p>
-                  <p className={`text-xl font-light ${selectedTransactionDetails.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                    {selectedTransactionDetails.type === 'income' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
+                  <h3 className="text-lg font-light text-white">Transaction Details</h3>
+                  <p className="text-xs text-white/40 mt-0.5 font-light">
+                    {selectedTransaction.tags && (selectedTransaction.tags.includes('debt') || selectedTransaction.tags.includes('debt-payment')) 
+                      ? 'Debt Transaction - Read Only' 
+                      : 'View transaction information'}
                   </p>
                 </div>
-                <div className="text-right">
-                  <p className="text-[10px] text-white/40">Date</p>
-                  <p className="text-sm font-light text-white/80">{formatDate(selectedTransaction.date, 'long')}</p>
-                </div>
+                <button onClick={() => setShowDetailModal(false)} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+                  <X className="w-5 h-5 text-white/60" />
+                </button>
               </div>
-              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-                <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${selectedTransactionDetails.color}20` }}>
-                  {selectedTransactionDetails.icon}
+            </div>
+
+            {/* Scrollable Content */}
+            <div className="flex-1 overflow-y-auto">
+              <div className="p-5 space-y-4">
+                {/* Debt Warning Badge */}
+                {selectedTransaction.tags && (selectedTransaction.tags.includes('debt') || selectedTransaction.tags.includes('debt-payment')) && (
+                  <div className="p-3 bg-amber-500/10 rounded-lg border border-amber-500/20">
+                    <div className="flex items-start gap-2">
+                      <AlertCircle className="w-4 h-4 text-amber-500 mt-0.5 flex-shrink-0" />
+                      <div>
+                        <p className="text-xs text-amber-500/80 font-light">
+                          This is a debt-related transaction. To maintain data consistency, please manage it from the Debts module.
+                        </p>
+                      </div>
+                    </div>
+                  </div>
+                )}
+
+                <div className="flex items-center justify-between">
+                  <div>
+                    <p className="text-[10px] text-white/40 font-light">Amount</p>
+                    <p className={`text-xl font-light ${selectedTransactionDetails.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                      {selectedTransactionDetails.type === 'income' ? '+' : '-'}{formatCurrency(selectedTransaction.amount)}
+                    </p>
+                  </div>
+                  <div className="text-right">
+                    <p className="text-[10px] text-white/40 font-light">Date</p>
+                    <p className="text-sm font-light text-white/80">{formatDate(selectedTransaction.date, 'long')}</p>
+                  </div>
                 </div>
-                <div>
-                  <p className="text-[10px] text-white/40">Category</p>
-                  <p className="text-sm font-light text-white/80">{selectedTransactionDetails.name}</p>
+
+                <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                  <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${selectedTransactionDetails.color}20` }}>
+                    {selectedTransactionDetails.icon}
+                  </div>
+                  <div>
+                    <p className="text-[10px] text-white/40 font-light">Category</p>
+                    <p className="text-sm font-light text-white/80">{selectedTransactionDetails.name}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-                <FileText className="w-4 h-4 text-white/40" />
-                <div>
-                  <p className="text-[10px] text-white/40">Description</p>
-                  <p className="text-sm font-light text-white/80">{selectedTransaction.description || '-'}</p>
+
+                <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                  <FileText className="w-4 h-4 text-white/40" />
+                  <div>
+                    <p className="text-[10px] text-white/40 font-light">Description</p>
+                    <p className="text-sm font-light text-white/80">{selectedTransaction.description || '-'}</p>
+                  </div>
                 </div>
-              </div>
-              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-                <Wallet className="w-4 h-4 text-white/40" />
-                <div>
-                  <p className="text-[10px] text-white/40">Wallet</p>
-                  <p className="text-sm font-light text-white/80">
-                    {wallets.find(w => w.id === selectedTransaction.walletId)?.icon} {wallets.find(w => w.id === selectedTransaction.walletId)?.name}
-                    {wallets.find(w => w.id === selectedTransaction.walletId)?.lastFourDigits && 
-                      ` (****${wallets.find(w => w.id === selectedTransaction.walletId)?.lastFourDigits})`}
-                  </p>
+
+                <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                  <Wallet className="w-4 h-4 text-white/40" />
+                  <div>
+                    <p className="text-[10px] text-white/40 font-light">Wallet</p>
+                    <p className="text-sm font-light text-white/80">
+                      {wallets.find(w => w.id === selectedTransaction.walletId)?.icon} {wallets.find(w => w.id === selectedTransaction.walletId)?.name}
+                      {wallets.find(w => w.id === selectedTransaction.walletId)?.lastFourDigits && 
+                        ` (****${wallets.find(w => w.id === selectedTransaction.walletId)?.lastFourDigits})`}
+                    </p>
+                  </div>
                 </div>
               </div>
             </div>
-            <div className="flex gap-3 p-5 border-t border-white/10">
-              <button
-                onClick={() => {
-                  setShowDetailModal(false);
-                  setEditingTransaction(selectedTransaction);
-                  setShowTransactionModal(true);
-                }}
-                className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/80 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                <Edit2 className="w-4 h-4" />
-                Edit
-              </button>
-              <button
-                onClick={() => {
-                  setShowDetailModal(false);
-                  handleDeleteClick(selectedTransaction.id, {} as React.MouseEvent);
-                }}
-                className="flex-1 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-500 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
-              >
-                <Trash2 className="w-4 h-4" />
-                Delete
-              </button>
+
+            {/* Footer - Sticky */}
+            <div className="sticky bottom-0 bg-white/[0.03] backdrop-blur-xl rounded-b-xl">
+              <div className="flex gap-3 p-5 border-t border-white/10">
+                {selectedTransaction.tags && (selectedTransaction.tags.includes('debt') || selectedTransaction.tags.includes('debt-payment')) ? (
+                  // Botones para transacciones de deuda
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowDetailModal(false);
+                        navigate('/debts');
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-amber-500/20 hover:bg-amber-500/30 rounded-lg text-amber-500 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
+                    >
+                      <ArrowRight className="w-4 h-4" />
+                      Go to Debts
+                    </button>
+                    <button
+                      onClick={() => setShowDetailModal(false)}
+                      className="flex-1 px-4 py-2.5 bg-white/[0.03] hover:bg-white/10 rounded-lg text-white/60 text-sm font-light transition-all duration-300"
+                    >
+                      Close
+                    </button>
+                  </>
+                ) : (
+                  // Botones para transacciones normales
+                  <>
+                    <button
+                      onClick={() => {
+                        setShowDetailModal(false);
+                        setEditingTransaction(selectedTransaction);
+                        setShowTransactionModal(true);
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-white/80 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
+                    >
+                      <Edit2 className="w-4 h-4" />
+                      Edit
+                    </button>
+                    <button
+                      onClick={() => {
+                        setShowDetailModal(false);
+                        handleDeleteClick(selectedTransaction.id, {} as React.MouseEvent);
+                      }}
+                      className="flex-1 px-4 py-2.5 bg-red-500/20 hover:bg-red-500/30 rounded-lg text-red-500 text-sm font-light transition-all duration-300 flex items-center justify-center gap-2"
+                    >
+                      <Trash2 className="w-4 h-4" />
+                      Delete
+                    </button>
+                  </>
+                )}
+              </div>
             </div>
           </div>
         </div>

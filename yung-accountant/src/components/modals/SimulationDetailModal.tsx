@@ -2,9 +2,8 @@
 
 import React from 'react';
 import { formatCurrency, formatDate } from '../../utils/formatters';
-;
 import type { SimulationTransaction } from '../../types';
-import { Calendar, FileText, X } from 'lucide-react';
+import { Calendar, FileText, X, TrendingUp, DollarSign } from 'lucide-react';
 
 interface SimulationDetailModalProps {
   isOpen: boolean;
@@ -43,112 +42,153 @@ const SimulationDetailModal: React.FC<SimulationDetailModalProps> = ({
     month: 'Monthly',
   };
 
+  const periodIcons = {
+    day: '📅',
+    week: '📆',
+    month: '📊',
+  };
+
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md max-h-[85vh] overflow-hidden">
-        <div className="flex justify-between items-center p-5 border-b border-white/10">
-          <h3 className="text-lg font-light text-white">Transaction Details</h3>
-          <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-            <X className="w-5 h-5 text-white/60" />
-          </button>
-        </div>
-
-        <div className="p-5 space-y-4">
-          {/* Amount and Period */}
-          <div className="bg-white/[0.02] rounded-lg p-3 border border-white/5">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-[10px] text-white/40">Amount</p>
-                <p className="text-xl font-light text-white">{formatCurrency(transaction.amount)}</p>
-              </div>
-              <div className="text-right">
-                <p className="text-[10px] text-white/40">Period</p>
-                <p className="text-sm font-light text-[#6366F1]">{periodLabels[transaction.period]}</p>
-              </div>
-            </div>
-          </div>
-
-          {/* Category */}
-          <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-            <div className="w-8 h-8 rounded-lg flex items-center justify-center text-lg" style={{ backgroundColor: `${category?.color}20` }}>
-              {category?.icon}
-            </div>
+    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md flex flex-col max-h-[85vh]">
+        {/* Header */}
+        <div className="sticky top-0 z-10">
+          <div className="flex justify-between items-center p-5 border-b border-white/10 bg-white/[0.03] backdrop-blur-xl">
             <div>
-              <p className="text-[10px] text-white/40">Category</p>
-              <p className="text-sm font-light text-white">{category?.name}</p>
-            </div>
-          </div>
-
-          {/* Description */}
-          {transaction.description && (
-            <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-              <FileText className="w-4 h-4 text-white/40" />
-              <div>
-                <p className="text-[10px] text-white/40">Description</p>
-                <p className="text-sm font-light text-white">{transaction.description}</p>
-              </div>
-            </div>
-          )}
-
-          {/* Date Range */}
-          <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-            <Calendar className="w-4 h-4 text-white/40" />
-            <div>
-              <p className="text-[10px] text-white/40">Date Range</p>
-              <p className="text-sm font-light text-white">
-                {formatDate(transaction.startDate, 'short')} → {formatDate(transaction.endDate, 'short')}
+              <h3 className="text-lg font-light text-white">Simulation Details</h3>
+              <p className="text-xs text-white/40 mt-0.5 font-light">
+                {periodLabels[transaction.period]} recurring transaction
               </p>
             </div>
+            <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+              <X className="w-5 h-5 text-white/60" />
+            </button>
           </div>
+        </div>
 
-          {/* Duration */}
-          <div className="grid grid-cols-3 gap-2 p-3 bg-white/[0.02] rounded-lg border border-white/5">
-            <div className="text-center">
-              <p className="text-[10px] text-white/40">Days</p>
-              <p className="text-base font-light text-white">{transaction.days}</p>
+        {/* Scrollable Content */}
+        <div className="flex-1 overflow-y-auto">
+          <div className="p-5 space-y-5">
+            {/* Amount and Period */}
+            <div className="bg-white/[0.02] rounded-lg p-4 border border-white/5">
+              <div className="flex items-center justify-between">
+                <div>
+                  <p className="text-[10px] text-white/40 font-light mb-1">Amount per {transaction.period}</p>
+                  <p className="text-2xl font-light text-white">{formatCurrency(transaction.amount)}</p>
+                </div>
+                <div className="text-right">
+                  <div className="w-10 h-10 rounded-xl flex items-center justify-center text-xl bg-white/[0.03] border border-white/10">
+                    {periodIcons[transaction.period]}
+                  </div>
+                  <p className="text-[10px] text-white/40 font-light mt-1">{periodLabels[transaction.period]}</p>
+                </div>
+              </div>
             </div>
-            <div className="text-center">
-              <p className="text-[10px] text-white/40">Weeks</p>
-              <p className="text-base font-light text-white">{transaction.weeks.toFixed(2)}</p>
-            </div>
-            <div className="text-center">
-              <p className="text-[10px] text-white/40">Months</p>
-              <p className="text-base font-light text-white">{transaction.months.toFixed(2)}</p>
-            </div>
-          </div>
 
-          {/* Financial Breakdown */}
-          <div className="p-3 bg-white/[0.02] rounded-lg border border-white/5">
-            <p className="text-[10px] text-white/40 mb-2">Financial Breakdown</p>
-            <div className="space-y-2">
-              <div className="flex justify-between text-sm">
-                <span className="text-white/40">Per day</span>
-                <span className="text-white font-light">{formatCurrency(dailyAmount)}</span>
+            {/* Category */}
+            <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+              <div 
+                className="w-10 h-10 rounded-lg flex items-center justify-center text-xl"
+                style={{ backgroundColor: `${category?.color}20` }}
+              >
+                {category?.icon || '💰'}
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/40">Per week</span>
-                <span className="text-white font-light">{formatCurrency(weeklyAmount)}</span>
+              <div>
+                <p className="text-[9px] text-white/40 font-light">Category</p>
+                <p className="text-sm font-light text-white">{category?.name || 'Unknown'}</p>
               </div>
-              <div className="flex justify-between text-sm">
-                <span className="text-white/40">Per month (30.44 days)</span>
-                <span className="text-white font-light">{formatCurrency(monthlyAmount)}</span>
+            </div>
+
+            {/* Description */}
+            {transaction.description && (
+              <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+                <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.03]">
+                  <FileText className="w-4 h-4 text-white/40" />
+                </div>
+                <div>
+                  <p className="text-[9px] text-white/40 font-light">Description</p>
+                  <p className="text-sm font-light text-white">{transaction.description}</p>
+                </div>
               </div>
-              <div className="h-px bg-white/10 my-1" />
-              <div className="flex justify-between text-sm font-medium">
-                <span className="text-white/60">Total for period</span>
-                <span className="text-[#6366F1]">{formatCurrency(totalAmount)}</span>
+            )}
+
+            {/* Date Range */}
+            <div className="flex items-center gap-3 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+              <div className="w-8 h-8 rounded-lg flex items-center justify-center bg-white/[0.03]">
+                <Calendar className="w-4 h-4 text-white/40" />
+              </div>
+              <div>
+                <p className="text-[9px] text-white/40 font-light">Date Range</p>
+                <p className="text-sm font-light text-white">
+                  {formatDate(transaction.startDate, 'short')} → {formatDate(transaction.endDate, 'short')}
+                </p>
+              </div>
+            </div>
+
+            {/* Duration */}
+            <div className="grid grid-cols-3 gap-2 p-3 bg-white/[0.02] rounded-lg border border-white/5">
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 font-light">Days</p>
+                <p className="text-base font-light text-white">{transaction.days}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 font-light">Weeks</p>
+                <p className="text-base font-light text-white">{transaction.weeks.toFixed(2)}</p>
+              </div>
+              <div className="text-center">
+                <p className="text-[9px] text-white/40 font-light">Months</p>
+                <p className="text-base font-light text-white">{transaction.months.toFixed(2)}</p>
+              </div>
+            </div>
+
+            {/* Financial Breakdown */}
+            <div className="p-3 bg-white/[0.02] rounded-lg border border-white/5">
+              <div className="flex items-center gap-2 mb-3">
+                <TrendingUp className="w-3.5 h-3.5 text-[#6366F1]" />
+                <p className="text-[9px] text-white/40 font-light uppercase tracking-wider">Financial Breakdown</p>
+              </div>
+              <div className="space-y-2">
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-3 h-3 text-white/30" />
+                    <span className="text-white/40 font-light">Per day</span>
+                  </div>
+                  <span className="text-white font-light">{formatCurrency(dailyAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-3 h-3 text-white/30" />
+                    <span className="text-white/40 font-light">Per week</span>
+                  </div>
+                  <span className="text-white font-light">{formatCurrency(weeklyAmount)}</span>
+                </div>
+                <div className="flex justify-between items-center text-sm">
+                  <div className="flex items-center gap-2">
+                    <DollarSign className="w-3 h-3 text-white/30" />
+                    <span className="text-white/40 font-light">Per month (30.44 days)</span>
+                  </div>
+                  <span className="text-white font-light">{formatCurrency(monthlyAmount)}</span>
+                </div>
+                <div className="h-px bg-white/10 my-2" />
+                <div className="flex justify-between items-center text-sm">
+                  <span className="text-white/60 font-light">Total for period</span>
+                  <span className="text-base font-light text-[#6366F1]">{formatCurrency(totalAmount)}</span>
+                </div>
               </div>
             </div>
           </div>
         </div>
 
-        <div className="p-5 border-t border-white/10">
-          <button
-            onClick={onClose}
-            className="w-full py-2.5 bg-white/5 hover:bg-white/10 rounded-lg text-white text-sm font-light transition-all duration-300"
-          >
-            Close
-          </button>
+        {/* Footer */}
+        <div className="sticky bottom-0">
+          <div className="flex gap-3 p-5 border-t border-white/10 bg-white/[0.03] backdrop-blur-xl">
+            <button
+              onClick={onClose}
+              className="flex-1 px-4 py-2.5 bg-white/[0.03] hover:bg-white/10 rounded-lg text-white/60 text-sm font-light transition-all duration-300"
+            >
+              Close
+            </button>
+          </div>
         </div>
       </div>
     </div>

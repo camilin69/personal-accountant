@@ -1,7 +1,7 @@
 // components/modals/CompleteDebtConfirmModal.tsx
 
 import React from 'react';
-import { X, Trophy, AlertTriangle, CheckCircle } from 'lucide-react';
+import { X, Trophy, AlertTriangle, CheckCircle, Edit2 } from 'lucide-react';
 import { formatCurrency } from '../../utils/formatters';
 
 interface CompleteDebtConfirmModalProps {
@@ -11,6 +11,7 @@ interface CompleteDebtConfirmModalProps {
   debtName: string;
   remainingAmount: number;
   type: 'borrowed' | 'lent';
+  isFromEdit?: boolean;
 }
 
 const CompleteDebtConfirmModal: React.FC<CompleteDebtConfirmModalProps> = ({
@@ -20,21 +21,24 @@ const CompleteDebtConfirmModal: React.FC<CompleteDebtConfirmModalProps> = ({
   debtName,
   remainingAmount,
   type,
+  isFromEdit = false,
 }) => {
   if (!isOpen) return null;
 
   const isBorrowed = type === 'borrowed';
   const actionText = isBorrowed ? 'pay off' : 'receive payment for';
+  
+  const title = isFromEdit ? 'Complete Debt via Edit' : 'Complete Debt';
 
   return (
     <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-[9999] animate-in fade-in duration-200">
       <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md overflow-hidden animate-in zoom-in-95 duration-200">
         <div className="flex justify-between items-center p-5 border-b border-white/10">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-full bg-green-500/20 flex items-center justify-center">
-              <Trophy className="w-5 h-5 text-green-500" />
+            <div className={`w-10 h-10 rounded-full ${isFromEdit ? 'bg-blue-500/20' : 'bg-green-500/20'} flex items-center justify-center`}>
+              {isFromEdit ? <Edit2 className="w-5 h-5 text-blue-500" /> : <Trophy className="w-5 h-5 text-green-500" />}
             </div>
-            <h3 className="text-lg font-light text-white">Complete Debt</h3>
+            <h3 className="text-lg font-light text-white">{title}</h3>
           </div>
           <button onClick={onClose} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
             <X className="w-5 h-5 text-white/60" />
@@ -55,15 +59,17 @@ const CompleteDebtConfirmModal: React.FC<CompleteDebtConfirmModalProps> = ({
           
           <div className="p-3 bg-white/[0.02] rounded-lg border border-white/5 mb-4">
             <div className="flex justify-between text-sm">
-              <span className="text-white/40">Remaining Amount</span>
+              <span className="text-white/40">{isFromEdit ? 'New Amount' : 'Remaining Amount'}</span>
               <span className="text-green-500 font-light">{formatCurrency(remainingAmount)}</span>
             </div>
           </div>
           
           <div className="space-y-2 text-xs text-white/40">
             <p>• This will mark the debt as <span className="text-green-500">COMPLETED</span></p>
-            <p>• A payment transaction will be created</p>
-            <p>• Your wallet balance will be updated</p>
+            {!isFromEdit && <p>• A payment transaction will be created</p>}
+            {!isFromEdit && <p>• Your wallet balance will be updated</p>}
+            {isFromEdit && <p>• The debt will be marked as paid</p>}
+            {isFromEdit && <p>• No new payment transaction will be created</p>}
             <p className="text-yellow-500/60">• This action cannot be undone</p>
           </div>
         </div>
@@ -80,10 +86,14 @@ const CompleteDebtConfirmModal: React.FC<CompleteDebtConfirmModalProps> = ({
               onConfirm();
               onClose();
             }}
-            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-green-500 to-emerald-600 rounded-lg text-white text-sm font-light transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+            className={`flex-1 px-4 py-2.5 rounded-lg text-white text-sm font-light transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2 ${
+              isFromEdit 
+                ? 'bg-gradient-to-r from-blue-500 to-indigo-600'
+                : 'bg-gradient-to-r from-green-500 to-emerald-600'
+            }`}
           >
-            <CheckCircle className="w-4 h-4" />
-            Complete Debt
+            {isFromEdit ? <Edit2 className="w-4 h-4" /> : <CheckCircle className="w-4 h-4" />}
+            {isFromEdit ? 'Complete & Update' : 'Complete Debt'}
           </button>
         </div>
       </div>

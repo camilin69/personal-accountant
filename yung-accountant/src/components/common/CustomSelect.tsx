@@ -20,6 +20,7 @@ interface CustomSelectProps {
   label?: string;
   required?: boolean;
   error?: string | null;
+  disabled?: boolean;
   className?: string;
   renderOption?: (option: SelectOption) => React.ReactNode;
   renderValue?: (option: SelectOption | undefined) => React.ReactNode;
@@ -33,6 +34,7 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
   label,
   required = false,
   error,
+  disabled = false,
   className = '',
   renderOption,
   renderValue,
@@ -136,16 +138,21 @@ const CustomSelect: React.FC<CustomSelectProps> = ({
         <button
           ref={buttonRef}
           type="button"
-          onClick={() => setIsOpen(!isOpen)}
-          className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light text-left flex items-center justify-between group hover:bg-white/10 transition-all duration-300 ${
+          onClick={() => !disabled && setIsOpen(!isOpen)}
+          disabled={disabled}
+          className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light text-left flex items-center justify-between group transition-all duration-300 ${
+            disabled 
+              ? 'opacity-50 cursor-not-allowed' 
+              : 'hover:bg-white/10'
+          } ${
             error ? 'border-red-500/50' : 'border-white/10'
           }`}
         >
           {renderSelectedValue()}
-          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-300 flex-shrink-0 ${isOpen ? 'rotate-180' : ''}`} />
+          <ChevronDown className={`w-4 h-4 text-white/40 transition-transform duration-300 flex-shrink-0 ${isOpen && !disabled ? 'rotate-180' : ''}`} />
         </button>
 
-        {isOpen && (
+        {isOpen && !disabled && (
           <div className="absolute z-50 w-full mt-1 bg-[#1A1A2E] backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-2xl">
             <div className="overflow-y-auto max-h-[280px]">
               {options.map(renderOptionItem)}

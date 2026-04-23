@@ -3,14 +3,16 @@
 import React, { useState } from 'react';
 import { useStore } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
-import { Calendar as CalendarIcon, Edit2, Plus, RefreshCw, Sparkles, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';;
+import { ArrowRight, Calendar as CalendarIcon, Edit2, Plus, RefreshCw, Sparkles, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 import Calendar from '../components/common/Calendar';
 import TransactionModal from '../components/modals/TransactionModal';
 import ConfirmModal from '../components/common/ConfirmModal';
 import ToastNotification from '../components/common/ToastNotification';
+import { useNavigate } from 'react-router-dom';
 
 const CalendarTransactions: React.FC = () => {
-  const { transactions, categories, deleteTransaction, setTransactions } = useStore();
+  const navigate = useNavigate();
+  const { transactions, categories, deleteTransaction, setTransactions, debts } = useStore();
   const [currentDate, setCurrentDate] = useState(new Date());
   const [showTransactionModal, setShowTransactionModal] = useState(false);
   const [showDayModal, setShowDayModal] = useState(false);
@@ -55,19 +57,48 @@ const CalendarTransactions: React.FC = () => {
   };
 
   const handleEditTransaction = (transaction: any) => {
+    const isDebtTransaction = transaction.tags && (transaction.tags.includes('debt') || transaction.tags.includes('debt-payment'));
+    
+    if (isDebtTransaction) {
+      setToastMessage('Debt transactions cannot be edited. Please manage them from the Debts module.');
+      setToastType('warning');
+      setShowToast(true);
+      return;
+    }
+    
     setEditingTransaction(transaction);
     setShowDayModal(false);
     setShowTransactionModal(true);
   };
 
+
   const handleDeleteTransaction = (id: string) => {
-    if (window.confirm('Delete this transaction?')) {
-      deleteTransaction(id);
-      setToastMessage('Transaction deleted successfully');
-      setToastType('success');
-      setShowToast(true);
+    const transaction = transactions.find(t => t.id === id);
+    
+    if (transaction && transaction.tags && (transaction.tags.includes('debt') || transaction.tags.includes('debt-payment'))) {
+      let debtName = '';
+      let debtType: 'borrowed' | 'lent' = 'borrowed';
+      
+      const debtId = transaction.tags.find(tag => 
+        (tag !== 'debt' && tag !== 'debt-payment' && debts.some(d => d.id === tag))
+      );
+      if (debtId) {
+        const debt = debts.find(d => d.id === debtId);
+        if (debt) {
+          debtName = debt.creditorName;
+          debtType = debt.type;
+        }
+      }
+      
+      return;
     }
+    
+    deleteTransaction(id);
+    setToastMessage('Transaction deleted successfully');
+    setToastType('success');
+    setShowToast(true);
   };
+
 
   const handleResetAllTransactions = () => {
     setShowResetConfirm(true);
@@ -159,78 +190,106 @@ const CalendarTransactions: React.FC = () => {
 
       {/* Day Detail Modal */}
       {showDayModal && selectedDate && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md max-h-[85vh] overflow-hidden">
-            <div className="flex justify-between items-center p-4 border-b border-white/10">
-              <div>
-                <h3 className="text-base font-light text-white">{formatDate(selectedDate, 'long')}</h3>
-                <p className="text-[10px] text-white/40 mt-0.5 font-light">Daily transactions</p>
-              </div>
-              <button onClick={() => setShowDayModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
-                <X className="w-4 h-4 text-white/60" />
-              </button>
-            </div>
-
-            <div className="p-4 overflow-y-auto max-h-[55vh] space-y-2">
-              {selectedDateTransactions.map(t => {
-                const cat = getCategoryById(t.categoryId);
-                if (!cat) return null;
-                return (
-                  <div key={t.id} className="flex items-center justify-between py-2 border-b border-white/5 group">
-                    <div className="flex items-center gap-2">
-                      <div
-                        className="w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all duration-300 group-hover:scale-110"
-                        style={{ backgroundColor: `${cat.color}20` }}
-                      >
-                        {cat.icon}
-                      </div>
-                      <div>
-                        <p className="text-sm font-light text-white">{cat.name}</p>
-                        <p className="text-[10px] text-white/40">{t.description || '-'}</p>
-                      </div>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      <p className={`text-sm font-light ${cat.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
-                        {cat.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
-                      </p>
-                      <button
-                        onClick={() => handleEditTransaction(t)}
-                        className="p-1 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Edit2 className="w-3.5 h-3.5 text-white/60 hover:text-white" />
-                      </button>
-                      <button
-                        onClick={() => handleDeleteTransaction(t.id)}
-                        className="p-1 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
-                      >
-                        <Trash2 className="w-3.5 h-3.5 text-white/40 hover:text-red-500" />
-                      </button>
-                    </div>
-                  </div>
-                );
-              })}
-              {selectedDateTransactions.length === 0 && (
-                <div className="text-center py-6">
-                  <div className="w-10 h-10 mx-auto mb-2 bg-white/[0.03] flex items-center justify-center">
-                    <CalendarIcon className="w-5 h-5 text-white/20" />
-                  </div>
-                  <p className="text-white/40 text-xs font-light">No transactions for this day</p>
+        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md flex flex-col max-h-[85vh]">
+            <div className="sticky top-0 z-10 bg-white/[0.03] backdrop-blur-xl rounded-t-xl">
+              <div className="flex justify-between items-center p-4 border-b border-white/10">
+                <div>
+                  <h3 className="text-base font-light text-white">{formatDate(selectedDate, 'long')}</h3>
+                  <p className="text-[10px] text-white/40 mt-0.5 font-light">Daily transactions</p>
                 </div>
-              )}
+                <button onClick={() => setShowDayModal(false)} className="p-1.5 rounded-lg hover:bg-white/10 transition-colors">
+                  <X className="w-4 h-4 text-white/60" />
+                </button>
+              </div>
             </div>
 
-            <div className="p-4 border-t border-white/10">
-              <button
-                onClick={() => {
-                  setShowDayModal(false);
-                  setEditingTransaction(null);
-                  setShowTransactionModal(true);
-                }}
-                className="w-full py-2 bg-white/5 hover:bg-white/10 transition-all duration-300 text-white text-sm font-light flex items-center justify-center gap-2 group"
-              >
-                <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
-                Add Transaction
-              </button>
+            <div className="flex-1 overflow-y-auto p-4">
+              <div className="space-y-2">
+                {selectedDateTransactions.map(t => {
+                  const cat = getCategoryById(t.categoryId);
+                  if (!cat) return null;
+                  const isDebtTransaction = t.tags && (t.tags.includes('debt') || t.tags.includes('debt-payment'));
+                  
+                  return (
+                    <div key={t.id} className="flex items-center justify-between py-2 border-b border-white/5 group">
+                      <div className="flex items-center gap-2">
+                        <div
+                          className="w-7 h-7 rounded-lg flex items-center justify-center text-sm transition-all duration-300 group-hover:scale-110"
+                          style={{ backgroundColor: `${cat.color}20` }}
+                        >
+                          {cat.icon}
+                        </div>
+                        <div>
+                          <p className="text-sm font-light text-white">{cat.name}</p>
+                          <p className="text-[10px] text-white/40">{t.description || '-'}</p>
+                          {isDebtTransaction && (
+                            <span className="text-[8px] px-1.5 py-0.5 rounded-full bg-amber-500/20 text-amber-500/80 mt-0.5 inline-block">
+                              Debt Transaction - Manage in Debts module
+                            </span>
+                          )}
+                        </div>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        <p className={`text-sm font-light ${cat.type === 'income' ? 'text-green-500' : 'text-red-500'}`}>
+                          {cat.type === 'income' ? '+' : '-'}{formatCurrency(t.amount)}
+                        </p>
+                        {!isDebtTransaction ? (
+                          <>
+                            <button
+                              onClick={() => handleEditTransaction(t)}
+                              className="p-1 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Edit2 className="w-3.5 h-3.5 text-white/60 hover:text-white" />
+                            </button>
+                            <button
+                              onClick={() => handleDeleteTransaction(t.id)}
+                              className="p-1 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                            >
+                              <Trash2 className="w-3.5 h-3.5 text-white/40 hover:text-red-500" />
+                            </button>
+                          </>
+                        ) : (
+                          <button
+                            onClick={() => {
+                              setShowDayModal(false);
+                              navigate('/debts');
+                            }}
+                            className="p-1 hover:bg-white/10 transition-colors opacity-0 group-hover:opacity-100"
+                            title="Manage in Debts module"
+                          >
+                            <ArrowRight className="w-3.5 h-3.5 text-amber-500 hover:text-amber-400" />
+                          </button>
+                        )}
+                      </div>
+                    </div>
+                  );
+                })}
+                {selectedDateTransactions.length === 0 && (
+                  <div className="text-center py-6">
+                    <div className="w-10 h-10 mx-auto mb-2 bg-white/[0.03] flex items-center justify-center">
+                      <CalendarIcon className="w-5 h-5 text-white/20" />
+                    </div>
+                    <p className="text-white/40 text-xs font-light">No transactions for this day</p>
+                  </div>
+                )}
+              </div>
+            </div>
+
+            <div className="sticky bottom-0 bg-white/[0.03] backdrop-blur-xl rounded-b-xl">
+              <div className="p-4 border-t border-white/10">
+                <button
+                  onClick={() => {
+                    setShowDayModal(false);
+                    setEditingTransaction(null);
+                    setShowTransactionModal(true);
+                  }}
+                  className="w-full py-2 bg-white/5 hover:bg-white/10 transition-all duration-300 text-white text-sm font-light flex items-center justify-center gap-2 group rounded-lg"
+                >
+                  <Plus className="w-3.5 h-3.5 group-hover:rotate-90 transition-transform duration-300" />
+                  Add Transaction
+                </button>
+              </div>
             </div>
           </div>
         </div>

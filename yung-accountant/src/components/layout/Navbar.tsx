@@ -87,11 +87,14 @@ const Navbar: React.FC<NavbarProps> = ({ onMobileMenuClick }) => {
           <form onSubmit={handleSearch} className="hidden md:flex items-center bg-white/[0.03] backdrop-blur-sm rounded-lg px-3 py-1.5 w-64 lg:w-96 border border-white/10 focus-within:border-white/20 transition-all duration-300">
             <Search className="w-4 h-4 text-white/30" />
             <input
+              id="search"
+              name="search"
               type="text"
               placeholder="Search transactions..."
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="bg-transparent border-none outline-none text-sm ml-2 flex-1 text-white/70 placeholder:text-white/20 font-light"
+              autoComplete="off"
             />
             <kbd className="hidden lg:inline text-[10px] text-white/20 bg-white/5 px-1.5 py-0.5 rounded">⌘K</kbd>
           </form>

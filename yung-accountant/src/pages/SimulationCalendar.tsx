@@ -11,7 +11,7 @@ import ToastNotification from '../components/common/ToastNotification';
 import SimulationDetailModal from '../components/modals/SimulationDetailModal';
 ;
 import type { SimulationTransaction } from '../types';
-import { ChevronDown, Clock, Edit2, PieChart, Plus, RefreshCw, Save, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
+import { AlertCircle, ChevronDown, Clock, Edit2, PieChart, Plus, RefreshCw, Save, Trash2, TrendingDown, TrendingUp, Wallet, X } from 'lucide-react';
 
 const SimulationCalendar: React.FC = () => {
   const periodOptions: SelectOption[] = [
@@ -959,165 +959,203 @@ const SimulationCalendar: React.FC = () => {
 
       {/* Modal para agregar/editar simulación */}
       {showModal && (
-        <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50">
-          <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md max-h-[90vh] overflow-y-auto">
-            <div className="flex justify-between items-center p-5 border-b border-white/10 sticky top-0 bg-[#1A1A2E]">
-              <h3 className="text-lg font-light text-white">
-                {editingTransaction ? 'Edit Simulation' : 'New Simulation'}
-              </h3>
-              <button onClick={() => { setShowModal(false); resetForm(); }} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
-                <X className="w-5 h-5 text-white/60" />
-              </button>
+  <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
+    <div className="bg-white/[0.03] backdrop-blur-xl border border-white/20 rounded-xl w-full max-w-md flex flex-col max-h-[90vh]">
+      {/* Header - Sticky con fondo consistente */}
+      <div className="sticky top-0 z-10">
+        <div className="flex justify-between items-center p-5 border-b border-white/10 bg-white/[0.03] backdrop-blur-xl">
+          <div>
+            <h3 className="text-lg font-light text-white">
+              {editingTransaction ? 'Edit Simulation' : 'New Simulation'}
+            </h3>
+            <p className="text-xs text-white/40 mt-0.5 font-light">
+              {editingTransaction ? 'Update your simulation' : 'Create a recurring transaction simulation'}
+            </p>
+          </div>
+          <button onClick={() => { setShowModal(false); resetForm(); }} className="p-2 rounded-lg hover:bg-white/10 transition-colors">
+            <X className="w-5 h-5 text-white/60" />
+          </button>
+        </div>
+      </div>
+
+      {/* Scrollable Content */}
+      <div className="flex-1 overflow-y-auto">
+        <div className="p-5 space-y-5">
+          {/* Amount with Period Selector */}
+          <div>
+            <label className="block text-xs text-white/40 mb-1.5 font-light">
+              Amount <span className="text-red-500">*</span>
+            </label>
+            <div className="flex gap-2">
+              <div className="flex-1">
+                <NumberInput
+                  value={formData.amount}
+                  onChange={handleAmountChange}
+                  placeholder="0"
+                  min={1}
+                  required
+                  error={errors.amount}
+                />
+              </div>
+              <div className="w-36">
+                <CustomSelect
+                  value={formData.period}
+                  onChange={(value) => handlePeriodChange(value as 'day' | 'week' | 'month')}
+                  options={periodOptions}
+                  placeholder="Select period"
+                />
+              </div>
             </div>
-            <div className="p-5 space-y-4">
-              {/* Amount with Period Selector */}
-              <div>
-                <label className="block text-xs text-white/40 mb-1.5 font-light">
-                  Amount <span className="text-red-500">*</span>
-                </label>
-                <div className="flex gap-2">
-                  <div className="flex-1">
-                    <NumberInput
-                      value={formData.amount}
-                      onChange={handleAmountChange}
-                      placeholder="0"
-                      min={1}
-                      required
-                      error={errors.amount}
-                    />
-                  </div>
-                  <div className="w-36">
-                    <CustomSelect
-                      value={formData.period}
-                      onChange={(value) => handlePeriodChange(value as 'day' | 'week' | 'month')}
-                      options={periodOptions}
-                      placeholder="Select period"
-                    />
-                  </div>
-                </div>
-                {formData.amount > 0 && formData.startDate && formData.endDate && (
-                  <div className="mt-2 p-2 bg-white/[0.02] rounded-lg border border-white/5">
-                    <p className="text-[9px] text-white/30">
-                      Total for period: <span className="text-[#6366F1]">{formatCurrency(modalTotalPreview)}</span>
-                    </p>
-                  </div>
-                )}
-              </div>
-
-              {/* Category */}
-              <CustomSelect
-                label="Category"
-                value={formData.categoryId}
-                onChange={handleCategoryChange}
-                options={categoryOptions}
-                placeholder="Select a category"
-                required
-                error={errors.categoryId}
-              />
-
-              {/* Description */}
-              <div>
-                <label className="block text-xs text-white/40 mb-1.5 font-light">Description (optional)</label>
-                <input
-                  type="text"
-                  value={formData.description}
-                  onChange={(e) => setFormData({ ...formData, description: e.target.value })}
-                  className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50"
-                  placeholder="e.g., Daily coffee, Rent, etc."
-                />
-              </div>
-
-              {/* Start Date */}
-              <div>
-                <label className="block text-xs text-white/40 mb-1.5 font-light">
-                  Start Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={formData.startDate}
-                  onChange={(e) => handleStartDateChange(e.target.value)}
-                  className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 ${
-                    errors.startDate ? 'border-red-500/50' : 'border-white/10'
-                  }`}
-                />
-                {errors.startDate && <p className="text-[10px] text-red-500/80 mt-1">{errors.startDate}</p>}
-              </div>
-
-              {/* End Date */}
-              <div>
-                <label className="block text-xs text-white/40 mb-1.5 font-light">
-                  End Date <span className="text-red-500">*</span>
-                </label>
-                <input
-                  type="date"
-                  value={formData.endDate}
-                  onChange={(e) => handleEndDateChange(e.target.value)}
-                  disabled={!isEndDateEnabled}
-                  className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 disabled:opacity-50 disabled:cursor-not-allowed ${
-                    errors.endDate ? 'border-red-500/50' : 'border-white/10'
-                  }`}
-                  min={formData.startDate || undefined}
-                />
-                {errors.endDate && <p className="text-[10px] text-red-500/80 mt-1">{errors.endDate}</p>}
-                {!isEndDateEnabled && (
-                  <p className="text-[10px] text-white/30 mt-1">Select start date first</p>
-                )}
-              </div>
-
-              {/* Duration Section */}
-              <div className="pt-2 border-t border-white/10">
-                <p className="text-xs text-white/40 mb-3 font-light">Duration (editable)</p>
-                <div className="grid grid-cols-3 gap-3">
-                  <NumberInput
-                    label="Days"
-                    value={formData.days}
-                    onChange={handleDaysChange}
-                    placeholder="0"
-                    min={1}
-                    disabled={!isStartDateSelected}
-                  />
-                  
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5 font-light">Weeks</label>
-                    <input
-                      type="text"
-                      value={weeksDisplayValue}
-                      onChange={handleWeeksChange}
-                      disabled={!isStartDateSelected}
-                      placeholder="0"
-                      className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                  
-                  <div>
-                    <label className="block text-xs text-white/40 mb-1.5 font-light">Months</label>
-                    <input
-                      type="text"
-                      value={monthsDisplayValue}
-                      onChange={handleMonthsChange}
-                      disabled={!isStartDateSelected}
-                      placeholder="0"
-                      className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 disabled:opacity-50 disabled:cursor-not-allowed"
-                    />
-                  </div>
-                </div>
-                <p className="text-[10px] text-white/30 mt-2">
-                  {!isStartDateSelected && "⚠️ Select a start date first to enable duration fields"}
+            {formData.amount > 0 && formData.startDate && formData.endDate && (
+              <div className="mt-2 p-2 bg-white/[0.02] rounded-lg border border-white/5">
+                <p className="text-[9px] text-white/30 font-light">
+                  Total for period: <span className="text-[#6366F1]">{formatCurrency(modalTotalPreview)}</span>
                 </p>
               </div>
+            )}
+          </div>
+
+          {/* Category */}
+          <CustomSelect
+            label="Category"
+            value={formData.categoryId}
+            onChange={handleCategoryChange}
+            options={categoryOptions}
+            placeholder="Select a category"
+            required
+            error={errors.categoryId}
+          />
+
+          {/* Description */}
+          <div>
+            <label className="block text-xs text-white/40 mb-1.5 font-light">Description (optional)</label>
+            <input
+              type="text"
+              value={formData.description}
+              onChange={(e) => setFormData({ ...formData, description: e.target.value })}
+              className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors placeholder:text-white/20"
+              placeholder="e.g., Daily coffee, Rent, etc."
+            />
+          </div>
+
+          {/* Start Date */}
+          <div>
+            <label className="block text-xs text-white/40 mb-1.5 font-light">
+              Start Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={formData.startDate}
+              onChange={(e) => handleStartDateChange(e.target.value)}
+              className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors ${
+                errors.startDate ? 'border-red-500/50' : 'border-white/10'
+              }`}
+            />
+            {errors.startDate && (
+              <div className="flex items-center gap-1 mt-1">
+                <AlertCircle className="w-3 h-3 text-red-500/80" />
+                <p className="text-[10px] text-red-500/80">{errors.startDate}</p>
+              </div>
+            )}
+          </div>
+
+          {/* End Date */}
+          <div>
+            <label className="block text-xs text-white/40 mb-1.5 font-light">
+              End Date <span className="text-red-500">*</span>
+            </label>
+            <input
+              type="date"
+              value={formData.endDate}
+              onChange={(e) => handleEndDateChange(e.target.value)}
+              disabled={!isEndDateEnabled}
+              className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed ${
+                errors.endDate ? 'border-red-500/50' : 'border-white/10'
+              }`}
+              min={formData.startDate || undefined}
+            />
+            {errors.endDate && (
+              <div className="flex items-center gap-1 mt-1">
+                <AlertCircle className="w-3 h-3 text-red-500/80" />
+                <p className="text-[10px] text-red-500/80">{errors.endDate}</p>
+              </div>
+            )}
+            {!isEndDateEnabled && (
+              <p className="text-[10px] text-white/30 font-light mt-1 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Select start date first
+              </p>
+            )}
+          </div>
+
+          {/* Duration Section */}
+          <div className="pt-2 border-t border-white/10">
+            <p className="text-xs text-white/40 mb-3 font-light">Duration (editable)</p>
+            <div className="grid grid-cols-3 gap-3">
+              <NumberInput
+                label="Days"
+                value={formData.days}
+                onChange={handleDaysChange}
+                placeholder="0"
+                min={1}
+                disabled={!isStartDateSelected}
+              />
+              
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5 font-light">Weeks</label>
+                <input
+                  type="text"
+                  value={weeksDisplayValue}
+                  onChange={handleWeeksChange}
+                  disabled={!isStartDateSelected}
+                  placeholder="0"
+                  className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-white/20"
+                />
+              </div>
+              
+              <div>
+                <label className="block text-xs text-white/40 mb-1.5 font-light">Months</label>
+                <input
+                  type="text"
+                  value={monthsDisplayValue}
+                  onChange={handleMonthsChange}
+                  disabled={!isStartDateSelected}
+                  placeholder="0"
+                  className="w-full px-4 py-2.5 bg-white/[0.03] border border-white/10 rounded-lg text-white/80 text-sm font-light focus:outline-none focus:border-[#6366F1]/50 transition-colors disabled:opacity-50 disabled:cursor-not-allowed placeholder:text-white/20"
+                />
+              </div>
             </div>
-            <div className="flex gap-3 p-5 border-t border-white/10 sticky bottom-0 bg-[#1A1A2E]">
-              <button onClick={() => { setShowModal(false); resetForm(); }} className="flex-1 px-4 py-2.5 bg-white/[0.03] hover:bg-white/10 rounded-lg text-white/60 text-sm font-light">
-                Cancel
-              </button>
-              <button onClick={handleSubmit} className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-lg text-white text-sm font-light hover:scale-[1.02] transition-all flex items-center justify-center gap-2">
-                <Save className="w-4 h-4" />
-                {editingTransaction ? 'Update' : 'Create'}
-              </button>
-            </div>
+            {!isStartDateSelected && (
+              <p className="text-[10px] text-amber-500/80 font-light mt-2 flex items-center gap-1">
+                <AlertCircle className="w-3 h-3" />
+                Select a start date first to enable duration fields
+              </p>
+            )}
           </div>
         </div>
-      )}
+      </div>
+
+      {/* Footer - Sticky con fondo consistente */}
+      <div className="sticky bottom-0">
+        <div className="flex gap-3 p-5 border-t border-white/10 bg-white/[0.03] backdrop-blur-xl">
+          <button 
+            onClick={() => { setShowModal(false); resetForm(); }} 
+            className="flex-1 px-4 py-2.5 bg-white/[0.03] hover:bg-white/10 rounded-lg text-white/60 text-sm font-light transition-all duration-300"
+          >
+            Cancel
+          </button>
+          <button 
+            onClick={handleSubmit} 
+            className="flex-1 px-4 py-2.5 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-lg text-white text-sm font-light transition-all duration-300 hover:scale-[1.02] flex items-center justify-center gap-2"
+          >
+            <Save className="w-4 h-4" />
+            {editingTransaction ? 'Update' : 'Create'}
+          </button>
+        </div>
+      </div>
+    </div>
+  </div>
+)}
 
       {/* Simulation Detail Modal */}
       <SimulationDetailModal

@@ -1,7 +1,7 @@
 // pages/Dashboard.tsx
 
 import React, { useMemo } from 'react';
-import { useStore, useTotalBalance, useGoalsAllocatedBalance, useAvailableBalance } from '../store/useStore';
+import { useStore, useTotalBalance, useGoalsAllocatedBalance, useDebtsBalance } from '../store/useStore';
 import { formatCurrency, formatDate } from '../utils/formatters';
 ;
 import { Link } from 'react-router-dom';
@@ -39,9 +39,10 @@ const Dashboard: React.FC = () => {
   const { transactions, categories, goals, wallets, debts } = useStore();
   const totalBalance = useTotalBalance();
   const allocatedToGoals = useGoalsAllocatedBalance();
-  const availableBalance = useAvailableBalance();
-
+  
   const getCategoryById = (id: string) => categories.find(c => c.id === id);
+
+  
 
   const walletDistribution = useMemo(() => {
     const distribution: { [key: string]: { total: number; count: number; icon: string; color: string; label: string } } = {
@@ -193,7 +194,10 @@ const Dashboard: React.FC = () => {
   const lentDebts = debts.filter(d => d.type === 'lent' && d.status === 'active');
   const totalBorrowed = borrowedDebts.reduce((sum, d) => sum + d.remainingBalance, 0);
   const totalLent = lentDebts.reduce((sum, d) => sum + d.remainingBalance, 0);
-  const netDebtPosition = totalLent - totalBorrowed;
+
+  const { borrowed: activeDebts, net: netDebtPosition } = useDebtsBalance();
+  const realAvailableAfterDebts = totalBalance - activeDebts;
+  const freeMoney = realAvailableAfterDebts - allocatedToGoals;
 
   const debtEvolution = useMemo(() => {
     const months = ['Ene', 'Feb', 'Mar', 'Abr', 'May', 'Jun', 'Jul', 'Ago', 'Sep', 'Oct', 'Nov', 'Dic'];
@@ -354,58 +358,70 @@ const Dashboard: React.FC = () => {
       </div>
 
       {/* Balance Cards */}
-      <div className="grid grid-cols-1 md:grid-cols-3 gap-4 mb-8">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-4 gap-4 mb-8">
+        {/* Balance Real */}
         <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800 hover:border-[#6366F1]/30 transition-all duration-300 group">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl bg-[#6366F1]/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                 <Wallet className="w-5 h-5 text-[#6366F1]" />
               </div>
-              <span className="text-xs text-white/40">TOTAL BALANCE</span>
+              <span className="text-xs text-white/40">💰 REAL BALANCE</span>
             </div>
           </div>
-          <p className="text-3xl font-light text-[#6366F1]">{formatCurrency(totalBalance)}</p>
-          <p className="text-[10px] text-white/30 mt-2">Overall financial position</p>
+          <p className="text-2xl font-light text-[#6366F1]">{formatCurrency(totalBalance)}</p>
+          <p className="text-[9px] text-white/30 mt-2">Money in wallets</p>
         </div>
 
+        {/* Deudas Activas */}
+        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800 hover:border-red-500/30 transition-all duration-300 group">
+          <div className="flex items-center justify-between mb-3">
+            <div className="flex items-center gap-2">
+              <div className="w-10 h-10 rounded-xl bg-red-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
+                <TrendingDown className="w-5 h-5 text-red-500" />
+              </div>
+              <span className="text-xs text-white/40">📋 ACTIVE DEBTS</span>
+            </div>
+          </div>
+          <p className="text-2xl font-light text-red-500">{formatCurrency(activeDebts)}</p>
+          <p className="text-[9px] text-white/30 mt-2">Money owed (borrowed)</p>
+        </div>
+
+        {/* Reservado para Goals */}
         <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800 hover:border-yellow-500/30 transition-all duration-300 group">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl bg-yellow-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                 <Target className="w-5 h-5 text-yellow-500" />
               </div>
-              <span className="text-xs text-white/40">IN GOALS</span>
+              <span className="text-xs text-white/40">🎯 RESERVED FOR GOALS</span>
             </div>
           </div>
-          <p className="text-3xl font-light text-yellow-500">{formatCurrency(allocatedToGoals)}</p>
-          <p className="text-[10px] text-white/30 mt-2">Allocated to active goals</p>
+          <p className="text-2xl font-light text-yellow-500">{formatCurrency(allocatedToGoals)}</p>
+          <p className="text-[9px] text-white/30 mt-2">Savings promise (virtual)</p>
         </div>
 
+        {/* Dinero Libre */}
         <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800 hover:border-green-500/30 transition-all duration-300 group">
           <div className="flex items-center justify-between mb-3">
             <div className="flex items-center gap-2">
               <div className="w-10 h-10 rounded-xl bg-green-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
                 <Sparkles className="w-5 h-5 text-green-500" />
               </div>
-              <span className="text-xs text-white/40">AVAILABLE</span>
+              <span className="text-xs text-white/40">✨ FREE MONEY</span>
             </div>
           </div>
-          <p className="text-3xl font-light text-green-500">{formatCurrency(availableBalance)}</p>
-          <p className="text-[10px] text-white/30 mt-2">Ready to use or save</p>
+          <p className="text-2xl font-light text-green-500">{formatCurrency(freeMoney)}</p>
+          <p className="text-[9px] text-white/30 mt-2">After debts & goals</p>
         </div>
+      </div>
 
-        <div className="bg-gradient-to-br from-[#1A1A2E] to-[#1A1A2E]/80 rounded-xl p-5 border border-gray-800 hover:border-[#6366F1]/30 transition-all duration-300 group">
-          <div className="flex items-center justify-between mb-3">
-            <div className="flex items-center gap-2">
-              <div className="w-10 h-10 rounded-xl bg-purple-500/10 flex items-center justify-center group-hover:scale-110 transition-transform duration-300">
-                <Wallet className="w-5 h-5 text-purple-500" />
-              </div>
-              <span className="text-xs text-white/40">ACTIVE WALLETS</span>
-            </div>
-          </div>
-          <p className="text-3xl font-light text-purple-500">{wallets.filter(w => w.isActive).length}</p>
-          <p className="text-[10px] text-white/30 mt-2">Money sources</p>
-        </div>
+      {/* Explicación de métricas - Tooltip o sección informativa */}
+      <div className="mb-6 p-3 bg-white/[0.02] rounded-lg border border-white/5 text-center">
+        <p className="text-[10px] text-white/30">
+          💡 <span className="text-white/40">How it works:</span> Goals are savings promises that don't move real money. 
+          "Free Money" shows what you can actually spend after considering debts and your savings promises.
+        </p>
       </div>
 
       {/* Quick Stats */}

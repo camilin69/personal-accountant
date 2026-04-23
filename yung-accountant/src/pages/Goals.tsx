@@ -139,7 +139,7 @@ const Goals: React.FC = () => {
           <h1 className="text-2xl font-light bg-gradient-to-r from-white to-white/60 bg-clip-text text-transparent tracking-tight">
             Goals
           </h1>
-          <p className="text-xs text-white/40 mt-0.5 font-light">Track and achieve your financial targets</p>
+          <p className="text-xs text-white/40 mt-0.5 font-light">Track and achieve your financial targets, system of savings on promise</p>
         </div>
         <button
           onClick={() => {
