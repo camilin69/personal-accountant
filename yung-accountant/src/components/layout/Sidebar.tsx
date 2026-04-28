@@ -17,9 +17,12 @@ import {
   Tag,
   Sparkles,
   ArrowLeftRight,
-  X
+  X,
+  Sun,
+  Moon
 } from 'lucide-react';
-import { useCategoryStore, useDebtsBalance, useGoalsAllocatedBalance, useGoalStore, useTotalBalance, useTransactionStore } from '../../store';
+import { useCategoryStore, useDebtsBalance, useGoalsAllocatedBalance, useGoalStore, useTotalBalance, useTransactionStore, useUserStore } from '../../store';
+import { Avatar } from '../common/Avatar';
 
 const menuItems = [
   { path: '/', icon: LayoutDashboard, label: 'Dashboard', color: '#6366F1' },
@@ -203,11 +206,24 @@ const SidebarContent: React.FC<{
   location, 
   onClose 
 }) => {
+  const { user } = useUserStore();
   const hour = new Date().getHours();
-  let greeting = 'Good morning';
-  let emoji = '🌅';
-  if (hour >= 12 && hour < 18) { greeting = 'Good afternoon'; emoji = '☀️'; }
-  else if (hour >= 18) { greeting = 'Good evening'; emoji = '🌙'; }
+  let greeting = '';
+  let greetingIcon = null;
+
+  if (hour < 12) {
+    greeting = 'Good Morning';
+    greetingIcon = <Sun className="w-3 h-3" />;
+  } else if (hour < 18) {
+    greeting = 'Good Afternoon';
+    greetingIcon = <Sun className="w-3 h-3" />;
+  } else {
+    greeting = 'Good Evening';
+    greetingIcon = <Moon className="w-3 h-3" />;
+  }
+
+  const displayName = user?.displayName || user?.firstName || user?.username || 'User';
+  
 
   return (
     <div className="flex flex-col">
@@ -216,30 +232,21 @@ const SidebarContent: React.FC<{
         {!isCollapsed ? (
           <>
             <div className="flex items-center gap-3 mb-4">
-              <div className="relative">
-                <div className="absolute inset-0 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-xl blur-md opacity-60" />
-                <div className="relative w-12 h-12 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-xl flex items-center justify-center text-base font-light shadow-lg">
-                  YN
-                </div>
-              </div>
+              <Avatar user={user} size="lg" />
               <div>
-                <h3 className="text-sm font-light text-white">Yung Nigga</h3>
-                <p className="text-[10px] text-white/40">Free Plan</p>
+                <h3 className="text-sm font-light text-white">{displayName}</h3>
+                <p className="text-[10px] text-white/40 capitalize">{user?.plan || 'Free'} Plan</p>
               </div>
             </div>
             <div className="flex items-center gap-2 text-[10px] text-white/40">
-              <span>{emoji}</span>
-              <span>{greeting}, Yung!</span>
+              {greetingIcon}
+              <span>{greeting}, {displayName}!</span>
+              <Sparkles className="w-3 h-3 text-yellow-500" />
             </div>
           </>
         ) : (
           <div>
-            <div className="relative w-10 h-10 mx-auto">
-              <div className="absolute inset-0 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-xl blur-md opacity-60" />
-              <div className="relative w-10 h-10 bg-gradient-to-r from-[#6366F1] to-[#EC4899] rounded-xl flex items-center justify-center text-sm font-light">
-                YN
-              </div>
-            </div>
+            <Avatar user={user} size="lg" />
           </div>
         )}
       </div>

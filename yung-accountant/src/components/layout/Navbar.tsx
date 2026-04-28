@@ -13,6 +13,7 @@ import {
 } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { useUserStore } from '../../store';
+import { Avatar } from '../common/Avatar';
 
 // SVG Logo component
 const LogoIcon: React.FC = () => (
@@ -68,9 +69,13 @@ const Navbar: React.FC<NavbarProps> = ({ onMobileMenuClick }) => {
 
   const unreadCount = notifications.filter(n => !n.read).length;
 
+  // Obtener display name para mostrar
+  const displayName = user?.displayName || user?.firstName || user?.username || 'User';
+  const userPlan = user?.plan || 'free';
+
   return (
     <>
-      <nav className="fixed top-0 left-0 right-0 bg-[#1A1A2E]/80 backdrop-blur-md border-b border-white/10 z-50 h-[64px]">
+      <nav className="fixed top-0 left-0 right-0 bg-[#0F172A]/80 backdrop-blur-xl border-b border-white/10 z-50 h-[64px]">
         <div className="h-full px-3 sm:px-4 md:px-6 flex items-center justify-between">
           {/* Left section */}
           <div className="flex items-center gap-2 sm:gap-3">
@@ -138,7 +143,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMobileMenuClick }) => {
               {showNotifications && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowNotifications(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#1A1A2E]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-72 sm:w-80 bg-[#0F172A]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
                     <div className="p-3 border-b border-white/10">
                       <h3 className="text-sm font-light text-white/80">Notifications</h3>
                     </div>
@@ -163,23 +168,18 @@ const Navbar: React.FC<NavbarProps> = ({ onMobileMenuClick }) => {
                 className="flex items-center gap-2 pl-2 sm:pl-3 border-l border-white/10 hover:bg-white/5 rounded-lg transition-all duration-300 px-2 py-1.5"
               >
                 <div className="text-right hidden sm:block">
-                  <p className="text-xs font-light text-white/80">{user?.displayName || user?.username}</p>
-                  <p className="text-[9px] text-white/40 capitalize">{user?.plan}</p>
+                  <p className="text-xs font-light text-white/80">{displayName}</p>
+                  <p className="text-[9px] text-white/40 capitalize">{userPlan}</p>
                 </div>
-                <div className="relative">
-                  <div className="absolute inset-0 bg-white/5 rounded-full blur-sm" />
-                  <div className="relative w-8 h-8 bg-gradient-to-br from-[#6366F1] to-[#EC4899] rounded-full flex items-center justify-center text-xs font-light text-white border border-white/10">
-                    {user?.displayName?.substring(0, 2).toUpperCase() || user?.username?.substring(0, 2).toUpperCase() || 'YN'}
-                  </div>
-                </div>
+                <Avatar user={user} size="md" />
               </button>
 
               {showUserMenu && (
                 <>
                   <div className="fixed inset-0 z-40" onClick={() => setShowUserMenu(false)} />
-                  <div className="absolute right-0 top-full mt-2 w-56 bg-[#1A1A2E]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
+                  <div className="absolute right-0 top-full mt-2 w-56 bg-[#0F172A]/90 backdrop-blur-xl border border-white/10 rounded-xl shadow-2xl z-50 overflow-hidden">
                     <div className="p-3 border-b border-white/10">
-                      <p className="text-sm font-light text-white/80">{user?.displayName || user?.username}</p>
+                      <p className="text-sm font-light text-white/80">{displayName}</p>
                       <p className="text-xs text-white/40">{user?.email}</p>
                     </div>
                     <div className="py-1">
@@ -222,7 +222,7 @@ const Navbar: React.FC<NavbarProps> = ({ onMobileMenuClick }) => {
       {showMobileSearch && (
         <div className="fixed inset-0 bg-[#0F0F1A] z-50 animate-in fade-in duration-200">
           <div className="flex flex-col h-full">
-            <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-[#1A1A2E]/80 backdrop-blur-md">
+            <div className="flex items-center gap-3 p-4 border-b border-white/10 bg-[#0F172A]/80 backdrop-blur-md">
               <button 
                 onClick={() => setShowMobileSearch(false)}
                 className="p-2 rounded-lg hover:bg-white/10 transition-colors"

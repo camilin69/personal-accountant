@@ -24,7 +24,7 @@ import {
   AlertCircle,
   PlusCircle as PlusCircleIcon
 } from 'lucide-react';
-import { useCategoryStore, useGoalStore, useTransactionStore, useWalletStore } from '../../store';
+import { useGoalStore, useWalletStore } from '../../store';
 
 interface GoalDetailModalProps {
   isOpen: boolean;
@@ -43,8 +43,6 @@ const GoalDetailModal: React.FC<GoalDetailModalProps> = ({
 }) => {
   const { goals, updateGoalAmount, addGoalTransaction, updateGoal } = useGoalStore();
   const { wallets } = useWalletStore();
-  const { addTransaction } = useTransactionStore();
-  const { categories } = useCategoryStore();
   const navigate = useNavigate();
   
   const [showAddForm, setShowAddForm] = useState(false);

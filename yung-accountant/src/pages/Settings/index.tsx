@@ -1,11 +1,9 @@
 // pages/Settings/index.tsx
 import React, { useState } from 'react';
 import { User, Bell, Palette, Shield, ChevronRight, Moon, Sun, Monitor } from 'lucide-react';
-import { useUserStore } from '../../store';
 import ToastNotification from '../../components/common/ToastNotification';
 
 const Settings: React.FC = () => {
-  const { user } = useUserStore();
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('success');

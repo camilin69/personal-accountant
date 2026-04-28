@@ -37,7 +37,7 @@ const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const [error, setError] = useState<string | null>(null);
   const [balanceError, setBalanceError] = useState<string | null>(null);
   const [isDebtTransaction, setIsDebtTransaction] = useState(false);
-  const [debtWarningMessage, setDebtWarningMessage] = useState<string | null>(null);
+  const [_debtWarningMessage, setDebtWarningMessage] = useState<string | null>(null);
 
   const getWalletIconComponent = (wallet: any) => {
     const iconMap: Record<string, React.ReactNode> = {
