@@ -12,6 +12,7 @@ export interface ThemeContextType {
   setTheme: (role: ThemeRole, mode: ThemeMode) => void;
   setMode: (mode: ThemeMode) => void;
   setRole: (role: ThemeRole) => void;
+  setThemeByRole: (role: string) => void;
   toggleMode: () => void;
 }
 
@@ -81,6 +82,14 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
     applyTheme(currentRole, mode);
   };
 
+  const setThemeByRole = (role: string) => {
+    const normalizedRole = role?.toLowerCase() as ThemeRole;
+    const validRole = ['estudiante', 'trabajador', 'ama-de-casa'].includes(normalizedRole) 
+      ? normalizedRole 
+      : 'estudiante';
+    setRole(validRole);
+  };
+
   // Cambiar solo el rol (manteniendo el modo actual)
   const setRole = (role: ThemeRole) => {
     setCurrentRole(role);
@@ -120,6 +129,7 @@ export const ThemeProvider: React.FC<{ children: React.ReactNode }> = ({ childre
       setTheme,
       setMode,
       setRole,
+      setThemeByRole,
       toggleMode,
     }}>
       {children}

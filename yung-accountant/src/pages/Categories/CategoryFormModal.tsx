@@ -31,8 +31,8 @@ export const CategoryFormModal: React.FC<CategoryFormModalProps> = ({
   const SelectedIcon = getIconComponent(formData.icon);
 
   return (
-    <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-      <div className="bg-[var(--theme-background-glass)] backdrop-blur-xl border border-[var(--theme-border-light)] rounded-xl w-full max-w-md flex flex-col max-h-[90vh]">
+    <div className="fixed inset-0 modal-overlay backdrop-blur-sm flex items-center justify-center z-50 p-4">
+      <div className="modal-container rounded-xl w-full max-w-md flex flex-col max-h-[90vh]">
         {/* Header - Sticky */}
         <div className="sticky top-0 z-10">
           <div className="flex justify-between items-center p-5 border-b border-[var(--theme-border-light)] bg-[var(--theme-background-glass)] backdrop-blur-xl rounded-t-xl">

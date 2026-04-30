@@ -27,6 +27,7 @@
   --theme-gradient-primary: linear-gradient(135deg, #3B82F6 0%, #06B6D4 100%);
   --theme-gradient-secondary: linear-gradient(135deg, #1a1a2e 0%, #0f0f1a 100%);
   --theme-gradient-accent: linear-gradient(135deg, #8B5CF6 0%, #3B82F6 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.8);
 }
 
 /* Modo Claro - Estudiante (Ocean Light) */
@@ -39,19 +40,20 @@
   --theme-secondary-dark: #0E7490;
   --theme-accent: #7C3AED;
   --theme-background-primary: #f8fafc;
-  --theme-background-secondary: #f1f5f9;
-  --theme-background-tertiary: #e2e8f0;
-  --theme-background-glass: rgba(37, 99, 235, 0.05);
-  --theme-background-glass-hover: rgba(37, 99, 235, 0.1);
+  --theme-background-secondary: #ffffff;  /* ← Cambiado a blanco sólido */
+  --theme-background-tertiary: #f1f5f9;
+  --theme-background-glass: rgba(255, 255, 255, 0.98);  /* ← Cambiado a casi blanco sólido */
+  --theme-background-glass-hover: rgba(0, 0, 0, 0.04);  /* ← Cambiado a negro con baja opacidad */
   --theme-text-primary: #0f172a;
   --theme-text-secondary: #334155;
   --theme-text-tertiary: #64748b;
-  --theme-border-light: rgba(37, 99, 235, 0.1);
-  --theme-border-medium: rgba(37, 99, 235, 0.15);
-  --theme-border-dark: rgba(37, 99, 235, 0.05);
+  --theme-border-light: #e2e8f0;  /* ← Cambiado a color sólido */
+  --theme-border-medium: #cbd5e1;
+  --theme-border-dark: #f1f5f9;
   --theme-gradient-primary: linear-gradient(135deg, #2563EB 0%, #0891B2 100%);
-  --theme-gradient-secondary: linear-gradient(135deg, #f1f5f9 0%, #f8fafc 100%);
+  --theme-gradient-secondary: linear-gradient(135deg, #ffffff 0%, #f8fafc 100%);
   --theme-gradient-accent: linear-gradient(135deg, #7C3AED 0%, #2563EB 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.3);
 }
 
 /* Modo Oscuro - Trabajador (Emerald Forest Dark) */
@@ -77,6 +79,7 @@
   --theme-gradient-primary: linear-gradient(135deg, #059669 0%, #10B981 100%);
   --theme-gradient-secondary: linear-gradient(135deg, #0f1f1a 0%, #0a1512 100%);
   --theme-gradient-accent: linear-gradient(135deg, #F59E0B 0%, #FBBF24 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.8);
 }
 
 /* Modo Claro - Trabajador (Emerald Forest Light) */
@@ -89,19 +92,20 @@
   --theme-secondary-dark: #B45309;
   --theme-accent: #7C3AED;
   --theme-background-primary: #f0fdf4;
-  --theme-background-secondary: #dcfce7;
-  --theme-background-tertiary: #bbf7d0;
-  --theme-background-glass: rgba(5, 150, 105, 0.05);
-  --theme-background-glass-hover: rgba(5, 150, 105, 0.1);
+  --theme-background-secondary: #ffffff;  /* ← Cambiado a blanco sólido */
+  --theme-background-tertiary: #dcfce7;
+  --theme-background-glass: rgba(255, 255, 255, 0.98);  /* ← Cambiado a casi blanco sólido */
+  --theme-background-glass-hover: rgba(0, 0, 0, 0.04);  /* ← Cambiado a negro con baja opacidad */
   --theme-text-primary: #064E3B;
   --theme-text-secondary: #065F46;
   --theme-text-tertiary: #047857;
-  --theme-border-light: rgba(5, 150, 105, 0.12);
-  --theme-border-medium: rgba(5, 150, 105, 0.18);
-  --theme-border-dark: rgba(5, 150, 105, 0.06);
+  --theme-border-light: #e2e8f0;  /* ← Cambiado a color sólido */
+  --theme-border-medium: #cbd5e1;
+  --theme-border-dark: #f1f5f9;
   --theme-gradient-primary: linear-gradient(135deg, #047857 0%, #059669 100%);
-  --theme-gradient-secondary: linear-gradient(135deg, #dcfce7 0%, #f0fdf4 100%);
+  --theme-gradient-secondary: linear-gradient(135deg, #ffffff 0%, #f0fdf4 100%);
   --theme-gradient-accent: linear-gradient(135deg, #D97706 0%, #F59E0B 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.3);
 }
 
 /* Modo Oscuro - Ama de Casa (Lavender Mist Dark) */
@@ -127,6 +131,7 @@
   --theme-gradient-primary: linear-gradient(135deg, #7C3AED 0%, #8B5CF6 100%);
   --theme-gradient-secondary: linear-gradient(135deg, #1a1525 0%, #14101a 100%);
   --theme-gradient-accent: linear-gradient(135deg, #F472B6 0%, #F9A8D4 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.8);
 }
 
 /* Modo Claro - Ama de Casa (Lavender Mist Light) */
@@ -139,19 +144,20 @@
   --theme-secondary-dark: #DB2777;
   --theme-accent: #0891B2;
   --theme-background-primary: #faf5ff;
-  --theme-background-secondary: #f3e8ff;
-  --theme-background-tertiary: #e9d5ff;
-  --theme-background-glass: rgba(124, 58, 237, 0.05);
-  --theme-background-glass-hover: rgba(124, 58, 237, 0.1);
+  --theme-background-secondary: #ffffff;  /* ← Cambiado a blanco sólido */
+  --theme-background-tertiary: #f3e8ff;
+  --theme-background-glass: rgba(255, 255, 255, 0.98);  /* ← Cambiado a casi blanco sólido */
+  --theme-background-glass-hover: rgba(0, 0, 0, 0.04);  /* ← Cambiado a negro con baja opacidad */
   --theme-text-primary: #2e1065;
   --theme-text-secondary: #4c1d95;
   --theme-text-tertiary: #6d28d9;
-  --theme-border-light: rgba(124, 58, 237, 0.12);
-  --theme-border-medium: rgba(124, 58, 237, 0.18);
-  --theme-border-dark: rgba(124, 58, 237, 0.06);
+  --theme-border-light: #e2e8f0;  /* ← Cambiado a color sólido */
+  --theme-border-medium: #cbd5e1;
+  --theme-border-dark: #f1f5f9;
   --theme-gradient-primary: linear-gradient(135deg, #6D28D9 0%, #7C3AED 100%);
-  --theme-gradient-secondary: linear-gradient(135deg, #f3e8ff 0%, #faf5ff 100%);
+  --theme-gradient-secondary: linear-gradient(135deg, #ffffff 0%, #faf5ff 100%);
   --theme-gradient-accent: linear-gradient(135deg, #EC4899 0%, #F472B6 100%);
+  --modal-overlay: rgba(0, 0, 0, 0.3);
 }
 
 /* ============================================
@@ -550,4 +556,16 @@ html {
 .input-error:focus {
   border-color: #EF4444;
   box-shadow: 0 0 0 3px rgba(239, 68, 68, 0.1);
+}
+
+.modal-overlay {
+  background-color: var(--modal-overlay);
+  backdrop-filter: blur(8px);
+}
+
+/* Contenedor del modal */
+.modal-container {
+  background-color: var(--theme-background-glass);
+  backdrop-filter: blur(12px);
+  border: 1px solid var(--theme-border-light);
 }

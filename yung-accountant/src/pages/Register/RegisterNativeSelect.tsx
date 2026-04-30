@@ -35,25 +35,26 @@ export const RegisterNativeSelect: React.FC<RegisterNativeSelectProps> = ({
 
   const selectedOption = options.find(opt => opt.id === value);
 
-  // Actualizar posición del dropdown
+  // Actualizar posición del dropdown (usando coordenadas absolutas de la pantalla)
   const updatePosition = () => {
     if (buttonRef.current) {
       const rect = buttonRef.current.getBoundingClientRect();
-      const scrollY = window.scrollY;
-      const scrollX = window.scrollX;
-      const spaceBelow = window.innerHeight - rect.bottom;
       const dropdownHeight = Math.min(options.length * 48, 250);
       
-      let topPosition;
-      if (spaceBelow < dropdownHeight && rect.top > dropdownHeight) {
-        topPosition = rect.top + scrollY - dropdownHeight - 4;
-      } else {
-        topPosition = rect.bottom + scrollY + 4;
+      // Posición inicial: justo debajo del botón
+      let top = rect.bottom + 4;
+      
+      // Verificar si el dropdown se sale de la pantalla hacia abajo
+      if (top + dropdownHeight > window.innerHeight && rect.top - dropdownHeight > 0) {
+        // Si se sale y hay espacio arriba, mostrarlo hacia arriba
+        top = rect.top - dropdownHeight - 4;
       }
       
+      console.log('Dropdown position:', { top, left: rect.left, width: rect.width });
+      
       setDropdownPosition({
-        top: topPosition,
-        left: rect.left + scrollX,
+        top: top,
+        left: rect.left,
         width: rect.width,
       });
     }
@@ -73,13 +74,13 @@ export const RegisterNativeSelect: React.FC<RegisterNativeSelectProps> = ({
     };
     
     if (isOpen) {
-      document.addEventListener('mousedown', handleClickOutside);
       updatePosition();
+      document.addEventListener('mousedown', handleClickOutside);
     }
     return () => {
       document.removeEventListener('mousedown', handleClickOutside);
     };
-  }, [isOpen]);
+  }, [isOpen, options.length]);
 
   // Actualizar posición en scroll/resize
   useEffect(() => {
@@ -99,6 +100,14 @@ export const RegisterNativeSelect: React.FC<RegisterNativeSelectProps> = ({
     setIsOpen(false);
   };
 
+  const toggleDropdown = () => {
+    if (!isOpen) {
+      // Actualizar posición antes de abrir
+      setTimeout(updatePosition, 0);
+    }
+    setIsOpen(!isOpen);
+  };
+
   return (
     <div className="w-full">
       <label className="block text-xs text-white/40 mb-1.5 font-light">
@@ -108,7 +117,7 @@ export const RegisterNativeSelect: React.FC<RegisterNativeSelectProps> = ({
       <button
         ref={buttonRef}
         type="button"
-        onClick={() => setIsOpen(!isOpen)}
+        onClick={toggleDropdown}
         className={`w-full px-4 py-2.5 bg-white/[0.03] border rounded-lg text-white/80 text-sm font-light text-left flex items-center justify-between group transition-all duration-300 hover:bg-white/10 ${
           error ? 'border-red-500/50' : 'border-white/10 focus:border-[#3B82F6]/50'
         }`}
@@ -127,11 +136,11 @@ export const RegisterNativeSelect: React.FC<RegisterNativeSelectProps> = ({
       {isOpen && createPortal(
         <div
           ref={dropdownRef}
-          className="fixed z-[9999] bg-[#1A1A2E] backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-2xl min-w-[200px]"
+          className="fixed z-[99999] bg-[#1A1A2E] backdrop-blur-xl border border-white/10 rounded-lg overflow-hidden shadow-2xl"
           style={{
-            top: dropdownPosition.top,
-            left: dropdownPosition.left,
-            width: dropdownPosition.width,
+            top: `${dropdownPosition.top}px`,
+            left: `${dropdownPosition.left}px`,
+            width: `${dropdownPosition.width}px`,
           }}
         >
           <div className="overflow-y-auto py-1" style={{ maxHeight: '250px' }}>

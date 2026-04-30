@@ -3,7 +3,7 @@ import React, { useState } from 'react';
 import { X, Mail, Calendar, Building2, Briefcase, Save, AlertCircle, ArrowLeft } from 'lucide-react';
 import { useUserStore } from '../../store';
 import { useTheme } from '../../hooks/useTheme';
-import { RegisterNativeSelect } from '../Register/RegisterNativeSelect';
+import CustomSelect from '../../components/common/CustomSelect';
 import ToastNotification from '../../components/common/ToastNotification';
 import { Avatar } from '../../components/common/Avatar';
 
@@ -51,7 +51,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
     role: false,
   });
 
-  // Opciones para selects
+  // Opciones para selects con CustomSelect
   const clientOptions = clients.map(client => ({
     id: client.id,
     label: client.name,
@@ -248,13 +248,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
 
   return (
     <>
-      <div className="fixed inset-0 bg-black/80 backdrop-blur-sm flex items-center justify-center z-50 p-4">
-        <div className="bg-[var(--theme-background-glass)] backdrop-blur-xl border border-[var(--theme-border-light)] rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
-          {/* Header - estilo GoalDetailModal */}
-          <div className="sticky top-0 z-10">
-            <div className="flex justify-between items-center p-5 border-b border-[var(--theme-border-light)] bg-[var(--theme-background-glass)] backdrop-blur-xl rounded-t-xl">
+      <div className="fixed inset-0 modal-overlay backdrop-blur-sm flex items-center justify-center z-50 p-4">
+        <div className="modal-container rounded-xl w-full max-w-2xl flex flex-col max-h-[90vh]">
+          {/* Header */}
+          <div className="sticky top-0 z-10 bg-[var(--theme-background-glass)] backdrop-blur-xl rounded-t-xl">
+            <div className="flex justify-between items-center p-5 border-b border-[var(--theme-border-light)]">
               <div className="flex items-center gap-3">
-                <button onClick={onClose} className="p-2 rounded-lg hover:bg-[var(--theme-background-glass-hover)] transition-colors">
+                <button onClick={onClose} className="p-2 rounded-lg hover:bg-[var(--theme-background-glass-hover)] transition-colors lg:hidden">
                   <ArrowLeft className="w-5 h-5 text-[var(--theme-text-tertiary)]" />
                 </button>
                 <div>
@@ -266,7 +266,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
               </div>
               <button 
                 onClick={onClose} 
-                className="p-2 rounded-lg hover:bg-[var(--theme-background-glass-hover)] transition-colors"
+                className="hidden lg:block p-2 rounded-lg hover:bg-[var(--theme-background-glass-hover)] transition-colors"
               >
                 <X className="w-5 h-5 text-[var(--theme-text-tertiary)]" />
               </button>
@@ -274,7 +274,7 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
           </div>
 
           {/* Scrollable Content */}
-          <div className="flex-1 overflow-y-auto">
+          <div className="flex-1 overflow-y-auto modal-scroll">
             <div className="p-5 space-y-5">
               <form id="edit-profile-form" onSubmit={handleSubmit} className="space-y-5">
                 {/* Avatar Preview */}
@@ -401,31 +401,31 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
                   )}
                 </div>
 
-                {/* Client Select */}
-                <RegisterNativeSelect
+                {/* Client Select - CustomSelect */}
+                <CustomSelect
                   label="Municipio / Entidad"
                   value={formData.clientId}
                   onChange={(value) => handleSelectChange('clientId', value)}
                   options={clientOptions}
                   placeholder="Select your municipality"
-                  error={errors.clientId && touched.clientId ? errors.clientId : undefined}
                   required
+                  error={errors.clientId && touched.clientId ? errors.clientId : undefined}
                 />
 
-                {/* Role Select */}
+                {/* Role Select - CustomSelect */}
                 <div className="p-3 bg-[var(--theme-primary)]/10 rounded-lg border border-[var(--theme-primary)]/20">
                   <p className="text-xs text-[var(--theme-primary)] mb-2 flex items-center gap-2">
                     <Briefcase className="w-3 h-3" />
                     Changing your role changes the entire app theme
                   </p>
-                  <RegisterNativeSelect
+                  <CustomSelect
                     label="Rol / Ocupación"
                     value={formData.role}
                     onChange={(value) => handleSelectChange('role', value)}
                     options={roleOptions}
                     placeholder="Select your role"
-                    error={errors.role && touched.role ? errors.role : undefined}
                     required
+                    error={errors.role && touched.role ? errors.role : undefined}
                   />
                 </div>
 
@@ -471,13 +471,13 @@ export const EditProfileModal: React.FC<EditProfileModalProps> = ({ isOpen, onCl
             </div>
           </div>
 
-          {/* Footer - estilo GoalDetailModal */}
+          {/* Footer */}
           <div className="sticky bottom-0 bg-[var(--theme-background-glass)] backdrop-blur-xl rounded-b-xl">
             <div className="flex gap-3 p-5 border-t border-[var(--theme-border-light)]">
               <button
                 type="button"
                 onClick={onClose}
-                className="flex-1 px-4 py-2.5 bg-[var(--theme-background-glass-hover)] hover:bg-[var(--theme-background-glass-hover)]/80 rounded-lg text-[var(--theme-text-tertiary)] text-sm font-light transition-all duration-300"
+                className="flex-1 px-4 py-2.5 bg-[var(--theme-background-glass)] hover:bg-[var(--theme-background-glass-hover)] rounded-lg text-[var(--theme-text-tertiary)] text-sm font-light transition-all duration-300"
               >
                 Cancel
               </button>
