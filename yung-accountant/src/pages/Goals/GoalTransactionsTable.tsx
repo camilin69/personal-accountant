@@ -65,7 +65,7 @@ const GoalTransactionsTable: React.FC<GoalTransactionsTableProps> = ({ goalId })
   
   const confirmDelete = () => {
     if (transactionToDelete && goalId) {
-      deleteGoalTransaction(goalId, transactionToDelete.id);
+      deleteGoalTransaction(transactionToDelete.id);
       setToastMessage(`Transaction "${transactionToDelete.note}" deleted successfully`);
       setToastType('success');
       setShowToast(true);

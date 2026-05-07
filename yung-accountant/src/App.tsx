@@ -5,6 +5,7 @@ import { ThemeProvider } from './contexts/ThemeContext';
 import { useUserStore } from './store/user.store';
 import { useCategoryStore } from './store/category.store';
 import { useDebtStore } from './store/debt.store';
+import { useGoalStore } from './store';
 
 // Lazy load pages
 const Layout = lazy(() => import('./components/layout/Layout'));
@@ -40,10 +41,12 @@ function App() {
   const { isAuthenticated, initialize, isInitialized, isLoading } = useUserStore();
   const { fetchAllCategories } = useCategoryStore();
   const { fetchDebts } = useDebtStore();
+  const { fetchGoals } = useGoalStore();
 
   const authInitialized = useRef(false);
   const categoriesLoaded = useRef(false);
   const debtsLoaded = useRef(false);
+  const goalsLoaded = useRef(false);
 
   useEffect(() => {
     if (!authInitialized.current && !isInitialized) {
@@ -65,6 +68,13 @@ function App() {
       fetchDebts();
     }
   }, [isAuthenticated, fetchDebts]);
+
+  useEffect(() => {
+    if (!goalsLoaded.current && isAuthenticated) {
+      goalsLoaded.current = true;
+      fetchGoals();
+    }
+  }, [isAuthenticated, fetchGoals]);
 
   if (!isInitialized || isLoading) {
     return <LoadingSpinner />;

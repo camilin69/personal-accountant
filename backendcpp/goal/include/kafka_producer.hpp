@@ -3,7 +3,6 @@
 #include <librdkafka/rdkafkacpp.h>
 #include <string>
 #include <memory>
-#include <vector>
 #include <boost/json.hpp>
 
 namespace kafka {
@@ -19,19 +18,10 @@ public:
     
 private:
     std::unique_ptr<RdKafka::Producer> producer_;
+    std::string errstr;
 };
 
-class Consumer {
-public:
-    Consumer(const std::string& brokers, const std::string& group_id);
-    ~Consumer();
-    
-    bool subscribe(const std::vector<std::string>& topics);
-    boost::json::value consume(int timeout_ms = 1000);
-    void commit();
-    
-private:
-    std::unique_ptr<RdKafka::KafkaConsumer> consumer_;
-};
+// Singleton para tener un solo productor en todo el servicio
+Producer& getProducer();
 
 } // namespace kafka

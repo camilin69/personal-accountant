@@ -47,7 +47,7 @@ const GoalModal: React.FC<GoalModalProps> = ({ isOpen, onClose, onSave, editingG
     );
   };
 
-  const expenseCategories = categories.filter(c => c.type === 'expense' && !c.isSystem);
+  const expenseCategories = categories.filter(c => c.type === 'expense');
   
   const categoryOptions: SelectOption[] = expenseCategories.map(cat => {
     const IconComponent = getIconComponent(cat.icon);

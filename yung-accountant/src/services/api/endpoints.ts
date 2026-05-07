@@ -2,7 +2,8 @@ export const MICROSERVICES = {
   AUTH: import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8081',
   CATEGORIES: import.meta.env.VITE_CATEGORIES_SERVICE_URL || 'http://localhost:8082',
   DEBTS: import.meta.env.VITE_DEBTS_SERVICE_URL || 'http://localhost:8083',
-  POSTS: import.meta.env.VITE_POSTS_SERVICE_URL || 'http://localhost:8085',
+  GOALS: import.meta.env.VITE_GOALS_SERVICE_URL || 'http://localhost:8084',
+  POSTS: import.meta.env.VITE_POSTS_SERVICE_URL || 'http://localhost:8089',
 } as const;
 
 export const ENDPOINTS = {
@@ -27,6 +28,12 @@ export const ENDPOINTS = {
     PAYMENTS: (debtId: string) => `${MICROSERVICES.DEBTS}/debts/${debtId}/payments`,
     PAYMENT_BY_ID: (paymentId: string) => `${MICROSERVICES.DEBTS}/payments/${paymentId}`,
     INTERESTS: `${MICROSERVICES.DEBTS}/interests`,
+  },
+  GOALS: {
+    BASE: `${MICROSERVICES.GOALS}/goals`,
+    BY_ID: (id: string) => `${MICROSERVICES.GOALS}/goals/${id}`,
+    TRANSACTIONS: (goalId: string) => `${MICROSERVICES.GOALS}/goals/${goalId}/transactions`,
+    TRANSACTION_BY_ID: (id: string) => `${MICROSERVICES.GOALS}/goal-transactions/${id}`,
   },
   CATEGORIES: {
     BASE: `${MICROSERVICES.CATEGORIES}/categories`,

@@ -1,0 +1,67 @@
+#pragma once
+
+#include <string>
+#include <vector>
+#include <optional>
+#include <boost/json.hpp>
+#include <pqxx/pqxx>
+
+struct Goal {
+    std::string id;
+    std::string userId;
+    std::string name;
+    double targetAmount;
+    double currentAmount;
+    std::string targetDate;
+    std::string priority;      // 'high', 'medium', 'low'
+    std::string status;        // 'active', 'completed', 'failed'
+    std::string context;
+    std::string purchaseCategoryId;
+    std::string completedAt;
+    std::string createdAt;
+    std::string updatedAt;
+};
+
+struct GoalTransaction {
+    std::string id;
+    std::string goalId;
+    double amount;
+    std::string type;          // 'add' o 'remove'
+    std::string note;
+    std::string date;
+    std::string walletId;
+    std::string createdAt;
+};
+
+class GoalService {
+public:
+    static GoalService& getInstance();
+    
+    // CRUD Goals
+    std::vector<Goal> getGoalsByUser(const std::string& userId);
+    std::optional<Goal> getGoalById(const std::string& id, const std::string& userId);
+    std::optional<Goal> createGoal(const Goal& goal);
+    bool updateGoal(const std::string& id, const std::string& userId, const boost::json::object& updates);
+    bool deleteGoal(const std::string& id, const std::string& userId);
+    
+    // Goal Transactions
+    std::vector<GoalTransaction> getGoalTransactions(const std::string& goalId);
+    std::optional<GoalTransaction> addGoalTransaction(const GoalTransaction& transaction);
+    bool deleteGoalTransaction(const std::string& transactionId);
+    
+    // Cache
+    void invalidateCache(const std::string& userId);
+    
+private:
+    GoalService() = default;
+    
+    Goal rowToGoal(const pqxx::row& row);
+    GoalTransaction rowToTransaction(const pqxx::row& row);
+    
+    std::string goalToJson(const Goal& g);
+    Goal jsonToGoal(const std::string& json);
+    std::string goalsToJson(const std::vector<Goal>& goals);
+    std::vector<Goal> jsonToGoals(const std::string& json);
+    std::string transactionsToJson(const std::vector<GoalTransaction>& transactions);
+    std::vector<GoalTransaction> jsonToTransactions(const std::string& json);
+};

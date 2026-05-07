@@ -36,6 +36,13 @@ export const debtsAxios = axios.create({
   withCredentials: true,
 });
 
+export const goalsAxios = axios.create({
+  baseURL: MICROSERVICES.GOALS,
+  timeout: 10000,
+  headers: { 'Content-Type': 'application/json' },
+  withCredentials: true,
+});
+
 export const axiosInstance = axios.create({
   timeout: 10000,
   headers: { 'Content-Type': 'application/json' },
@@ -62,6 +69,7 @@ usersAxios.interceptors.request.use(attachToken);
 postsAxios.interceptors.request.use(attachToken);
 categoriesAxios.interceptors.request.use(attachToken);
 debtsAxios.interceptors.request.use(attachToken);
+goalsAxios.interceptors.request.use(attachToken);
 axiosInstance.interceptors.request.use(attachToken);
 
 // Interceptor para refresh token
@@ -111,4 +119,5 @@ usersAxios.interceptors.response.use((r) => r, handleUnauthorized);
 postsAxios.interceptors.response.use((r) => r, handleUnauthorized);
 categoriesAxios.interceptors.response.use((r) => r, handleUnauthorized);
 debtsAxios.interceptors.response.use((r) => r, handleUnauthorized);
+goalsAxios.interceptors.response.use((r) => r, handleUnauthorized);
 axiosInstance.interceptors.response.use((r) => r, handleUnauthorized);
