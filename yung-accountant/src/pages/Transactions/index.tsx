@@ -1,5 +1,4 @@
 // pages/Transactions/index.tsx
-import React from 'react';
 import { Plus, TrendingUp, TrendingDown, Wallet } from 'lucide-react';
 import { useThemeStyles } from '../../hooks/useTheme';
 import { formatCurrency } from '../../utils/formatters';
@@ -44,6 +43,7 @@ const Transactions: React.FC = () => {
     stats,
     incomeCategories,
     expenseCategories,
+    categories,
     getCategoryById,
     getWalletById,
     handleDeleteClick,
@@ -51,6 +51,8 @@ const Transactions: React.FC = () => {
     handleViewDetails,
     handleEdit,
   } = useTransactions();
+
+  
 
   return (
     <div className="max-w-6xl mx-auto">
@@ -153,6 +155,9 @@ const Transactions: React.FC = () => {
         }}
         editingTransaction={selectedTransaction}
         defaultDate={selectedTransaction?.date}
+        incomeCategories={incomeCategories}
+        expenseCategories={expenseCategories}
+        categories={categories}
       />
 
       {/* Confirm Delete Modal */}

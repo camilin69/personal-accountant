@@ -1,6 +1,6 @@
 // components/modals/TransactionDetailModal.tsx
 import React, { useState, useEffect } from 'react';
-import { useCategoryStore, useWalletStore, useTransactionStore } from '../../store';
+import { useWalletStore, useTransactionStore } from '../../store';
 import NumberInput from '../../components/common/NumberInput';
 import CustomSelect from '../../components/common/CustomSelect';
 import { formatCurrency } from '../../utils/formatters';
@@ -8,6 +8,7 @@ import { AlertCircle, Save, X, PlusCircle, ArrowLeft } from 'lucide-react';
 import { useNavigate } from 'react-router-dom';
 import { getIconComponent } from '../../utils/iconHelpers';
 import { Wallet as WalletIcon, Building2, CreditCard, DollarSign, Package } from 'lucide-react';
+import type { Category } from '../../types';
 
 interface TransactionDetailModalProps {
   isOpen: boolean;
@@ -15,6 +16,9 @@ interface TransactionDetailModalProps {
   onSave: () => void;
   editingTransaction?: any;
   defaultDate?: string;
+  incomeCategories: Category[];
+  expenseCategories: Category[];
+  categories: Category[];
 }
 
 const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
@@ -23,8 +27,10 @@ const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   onSave,
   editingTransaction,
   defaultDate,
+  incomeCategories,
+  expenseCategories,
+  categories
 }) => {
-  const { categories } = useCategoryStore();
   const { wallets } = useWalletStore();
   const { addTransaction, updateTransaction } = useTransactionStore();
   const navigate = useNavigate();
@@ -65,6 +71,7 @@ const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
   const selectedCategory = categories.find(c => c.id === categoryId);
   const isExpense = selectedCategory?.type === 'expense';
 
+  
   useEffect(() => {
     if (isExpense && amount > 0 && walletId && !isDebtTransaction) {
       if (amount > availableBalance) {
@@ -77,8 +84,6 @@ const TransactionDetailModal: React.FC<TransactionDetailModalProps> = ({
     }
   }, [amount, walletId, isExpense, availableBalance, isDebtTransaction]);
 
-  const incomeCategories = categories.filter(c => c.type === 'income' && !c.isSystem);
-  const expenseCategories = categories.filter(c => c.type === 'expense' && !c.isSystem);
   
   const categoryOptions = [
     ...(incomeCategories.length > 0 

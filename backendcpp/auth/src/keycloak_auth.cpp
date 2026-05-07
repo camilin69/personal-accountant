@@ -353,7 +353,7 @@ bool KeycloakClient::registerUser(const std::string& email,
                                   int age,
                                   const std::string& clientId,
                                   const std::string& role,
-                                  const std::string& mongoId,
+                                  const std::string& postgresId,  // Cambiado
                                   std::string& keycloakId) {
     
     std::string adminToken = getAdminToken();
@@ -371,9 +371,8 @@ bool KeycloakClient::registerUser(const std::string& email,
     userObj["enabled"] = true;
     userObj["emailVerified"] = true;
     
-    // Atributos
     json::object attributes;
-    attributes["mongoId"] = json::array({mongoId});
+    attributes["postgresId"] = json::array({postgresId});  // Cambiado
     attributes["age"] = json::array({std::to_string(age)});
     attributes["clientId"] = json::array({clientId});
     attributes["role"] = json::array({role});
@@ -392,10 +391,7 @@ bool KeycloakClient::registerUser(const std::string& email,
     
     std::string response = httpPostWithAuth("/admin/realms/" + realm_ + "/users", userJson, adminToken);
     
-    // Esperar un momento
-    //sleep(0.1);
-    
-    // Obtener el ID REAL que Keycloak asignó al usuario (no es el mongoId)
+    // Obtener el ID REAL que Keycloak asignó al usuario
     std::string realKeycloakId = getUserIdByEmail(email);
     if (realKeycloakId.empty()) {
         std::cerr << "Failed to get user ID from Keycloak" << std::endl;
@@ -418,16 +414,17 @@ bool KeycloakClient::registerUser(const std::string& email,
         return false;
     }
     
-    // Asignar rol al usuario usando el ID REAL de Keycloak
+    // Asignar rol al usuario
     assignRole(realKeycloakId, clientUuid, roleUuid, adminToken);
     
     std::cout << "✓ Usuario registrado en Keycloak: " << email 
               << " | Keycloak ID: " << realKeycloakId
-              << " | mongoId: " << mongoId
+              << " | postgresId: " << postgresId  // Cambiado
               << " | Rol: " << role << std::endl;
     
     return true;
 }
+
 
 // ============================================
 // LOGIN
@@ -803,9 +800,8 @@ UserInfo KeycloakClient::verifyToken(const std::string& token) {
                 if (obj.contains("given_name")) info.firstName = std::string(obj.at("given_name").as_string());
                 if (obj.contains("family_name")) info.lastName = std::string(obj.at("family_name").as_string());
                 
-                // Atributos personalizados (ahora directamente en el token)
-                if (obj.contains("mongoId")) {
-                    info.mongoId = std::string(obj.at("mongoId").as_string());
+                if (obj.contains("postgresId")) {  // Cambiado
+                    info.postgresId = std::string(obj.at("postgresId").as_string());
                 }
                 if (obj.contains("age")) {
                     try {
@@ -832,7 +828,7 @@ UserInfo KeycloakClient::verifyToken(const std::string& token) {
                 }
                 
                 std::cout << "✓ Token válido para: " << info.email 
-                          << " | mongoId: " << info.mongoId 
+                          << " | postgresId: " << info.postgresId  // Cambiado
                           << " | role: " << info.role 
                           << " | clientId: " << info.clientId << std::endl;
                 return info;

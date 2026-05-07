@@ -1,11 +1,11 @@
 export interface Category {
   id: string;
-  userId: string;
+  userId: string | null;
   name: string;
   type: 'income' | 'expense';
   icon: string;
   color: string;
-  isDefault?: boolean;
-  isSystem?: boolean;
+  isSystem: boolean;
+  isDefault: boolean;
   createdAt: string;
 }

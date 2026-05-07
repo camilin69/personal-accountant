@@ -1,11 +1,19 @@
 // pages/Categories/useCategories.ts
 
-import { useState } from 'react';
-import { useCategoryStore, useUserStore } from '../../store';
+import { useEffect, useRef, useState } from 'react';
+import { useCategoryStore } from '../../store';
 
 export const useCategories = () => {
-  const { categories, addCategory, updateCategory, deleteCategory } = useCategoryStore();
-  const { user } = useUserStore();
+  const { 
+    categories, 
+    isLoading,           
+    fetchAllCategories,  
+    addCategory, 
+    updateCategory, 
+    deleteCategory 
+  } = useCategoryStore();
+  
+  const fetchedRef = useRef(false);
   
   const [showModal, setShowModal] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
@@ -35,6 +43,13 @@ export const useCategories = () => {
     return category.isDefault || ['Borrow', 'Lent', 'Debt Payment', 'Debt Collection'].includes(category.name);
   };
 
+  useEffect(() => {
+    if (!fetchedRef.current && categories.length === 0 && !isLoading) {
+      fetchedRef.current = true;
+      fetchAllCategories();
+    }
+  }, []);
+  
   const handleSubmit = () => {
     if (!formData.name.trim()) {
       setToastMessage('Please enter a category name');
@@ -49,9 +64,11 @@ export const useCategories = () => {
     } else {
       // Usar el userId del usuario actual
       addCategory({
-          ...formData,
-          isDefault: false,
-      }, user?.id || '');
+            name: formData.name,
+            type: formData.type,
+            icon: formData.icon,
+            color: formData.color,
+      });
       setToastMessage('Category created successfully');
     }
     setToastType('success');

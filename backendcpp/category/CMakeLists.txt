@@ -1,5 +1,5 @@
 cmake_minimum_required(VERSION 3.14)
-project(auth VERSION 1.0.0)
+project(category VERSION 1.0.0)
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -33,9 +33,9 @@ include_directories(${HIREDIS_INCLUDE_DIRS})
 include_directories(include)
 
 # Add executable
-add_executable(auth
+add_executable(category
     src/main.cpp
-    src/user_service.cpp
+    src/category_service.cpp
     src/database.cpp
     src/keycloak_auth.cpp
     src/kafka_producer.cpp
@@ -43,7 +43,7 @@ add_executable(auth
 )
 
 # Link libraries
-target_link_libraries(auth
+target_link_libraries(category
     ${PQXX_LIBRARIES}
     ${PostgreSQL_LIBRARIES}
     ${RDKAFKA_LIBRARIES}
@@ -54,7 +54,7 @@ target_link_libraries(auth
     dl
 )
 
-target_include_directories(auth PRIVATE
+target_include_directories(category PRIVATE
     ${PQXX_INCLUDE_DIRS}
     ${PostgreSQL_INCLUDE_DIRS}
     ${Boost_INCLUDE_DIRS}
@@ -62,4 +62,4 @@ target_include_directories(auth PRIVATE
     ${HIREDIS_INCLUDE_DIRS}
 )
 
-target_compile_options(auth PRIVATE -Wall -Wextra -O2)
+target_compile_options(category PRIVATE -Wall -Wextra -O2)

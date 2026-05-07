@@ -8,7 +8,7 @@ namespace keycloak {
 
 struct UserInfo {
     std::string id;          // UUID de Keycloak
-    std::string mongoId;     // ID en MongoDB
+    std::string postgresId;  // ID en PostgreSQL
     std::string username;
     std::string email;
     std::string firstName;
@@ -38,7 +38,7 @@ public:
                       int age,
                       const std::string& clientId,
                       const std::string& role,
-                      const std::string& mongoId,
+                      const std::string& postgresId,
                       std::string& keycloakId);
     
     UserInfo verifyToken(const std::string& token);
@@ -50,7 +50,6 @@ public:
                               const std::string& clientId,
                               const std::string& role);
     
-    // Método para actualizar el rol del usuario
     bool updateUserRole(const std::string& keycloakId,
                         const std::string& clientId,
                         const std::string& oldRole,
@@ -61,12 +60,14 @@ public:
     bool deleteUser(const std::string& keycloakId);
     std::string getRefreshToken(const std::string& email, const std::string& clientId);
     std::string getUserIdByEmail(const std::string& email);
+    
     // HTTP helpers
     std::string httpPost(const std::string& endpoint, const std::string& data);
     std::string httpPostWithAuth(const std::string& endpoint, const std::string& data, const std::string& token);
     std::string httpGet(const std::string& endpoint, const std::string& token);
     std::string httpPut(const std::string& endpoint, const std::string& data, const std::string& token);
     std::string httpDelete(const std::string& endpoint, const std::string& token);
+    
 private:
     std::string keycloakUrl_;
     std::string realm_;

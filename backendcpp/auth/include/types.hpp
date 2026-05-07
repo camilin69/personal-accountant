@@ -11,7 +11,7 @@ namespace keycloak {
         std::string username;
         std::string firstName;
         std::string lastName;
-        std::string mongoId;
+        std::string postgresId;
         std::string clientId;
         std::string role;
         int age = 0;

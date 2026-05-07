@@ -17,7 +17,9 @@ CLIENT_ALCALDIA_TUNJA_SECRET="${CLIENT_ALCALDIA_TUNJA_SECRET:-tunja-secret-2024}
 echo "Keycloak URL: $KEYCLOAK_URL"
 echo "Realm: $KEYCLOAK_REALM"
 
+# ============================================
 # 1. Obtener token de administración
+# ============================================
 echo "Obteniendo token de administración..."
 ADMIN_TOKEN=$(curl -s -X POST "$KEYCLOAK_URL/realms/master/protocol/openid-connect/token" \
     -H "Content-Type: application/x-www-form-urlencoded" \
@@ -30,54 +32,87 @@ if [ -z "$ADMIN_TOKEN" ] || [ "$ADMIN_TOKEN" = "null" ]; then
     echo "❌ Failed to get admin token"
     exit 1
 fi
-
 echo "✓ Admin token obtained"
 
-# 2. Crear realm (si no existe)
+# ============================================
+# 2. Crear realm si no existe
+# ============================================
 echo "Creando realm: $KEYCLOAK_REALM..."
-curl -s -X POST "$KEYCLOAK_URL/admin/realms" \
+REALM_EXISTS=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM" \
+    -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.realm // empty')
+
+if [ "$REALM_EXISTS" = "$KEYCLOAK_REALM" ]; then
+    echo "  ✓ Realm already exists"
+else
+    curl -s -X POST "$KEYCLOAK_URL/admin/realms" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" \
+        -H "Content-Type: application/json" \
+        -d "{
+            \"realm\": \"$KEYCLOAK_REALM\",
+            \"enabled\": true,
+            \"displayName\": \"Yung Accountant\",
+            \"loginWithEmailAllowed\": true,
+            \"registrationAllowed\": false,
+            \"resetPasswordAllowed\": true,
+            \"rememberMe\": true
+        }"
+    echo "  ✓ Realm created"
+fi
+
+# ============================================
+# 3. Configurar tiempos de token EN EL REALM
+# ============================================
+echo "Configurando tiempos de token..."
+
+# Obtener configuración actual primero
+CURRENT_CONFIG=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM" \
+    -H "Authorization: Bearer $ADMIN_TOKEN")
+
+# Actualizar con merge de la configuración actual + nuevos tiempos
+curl -s -X PUT "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM" \
     -H "Authorization: Bearer $ADMIN_TOKEN" \
     -H "Content-Type: application/json" \
     -d "{
         \"realm\": \"$KEYCLOAK_REALM\",
         \"enabled\": true,
-        \"displayName\": \"Yung Accountant\",
-        \"loginWithEmailAllowed\": true
-    }" || echo "  (Realm may already exist)"
+        \"accessTokenLifespan\": 1800,
+        \"accessTokenLifespanForImplicitFlow\": 900,
+        \"ssoSessionIdleTimeout\": 1800,
+        \"ssoSessionMaxLifespan\": 86400,
+        \"offlineSessionIdleTimeout\": 2592000,
+        \"offlineSessionMaxLifespan\": 5184000,
+        \"refreshTokenMaxReuse\": 0,
+        \"clientSessionIdleTimeout\": 0,
+        \"clientSessionMaxLifespan\": 0
+    }" > /dev/null
 
-# 3. Configurar tiempos de token en el realm
-echo "Configurando tiempos de token en el realm..."
-curl -s -X PUT "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM" \
-    -H "Authorization: Bearer $ADMIN_TOKEN" \
-    -H "Content-Type: application/json" \
-    -d '{
-        "accessTokenLifespan": 3600,
-        "refreshTokenLifespan": 86400,
-        "ssoSessionIdleTimeout": 86400,
-        "ssoSessionMaxLifespan": 86400
-    }' || echo "  (Config may already exist)"
+echo "  ✓ Token times configured:"
+echo "    - Access Token: 1800s (30 min)"
+echo "    - SSO Session Idle: 1800s (30 min)"
+echo "    - SSO Session Max: 86400s (24 hours)"
 
-# Función para crear cliente
+# ============================================
+# 4. Crear clientes
+# ============================================
 create_client() {
     local client_id=$1
     local client_secret=$2
     local client_name=$3
     local client_desc=$4
     
+    echo ""
     echo "=========================================="
-    echo "Creando cliente: $client_name ($client_id)"
+    echo "Client: $client_name ($client_id)"
     echo "=========================================="
     
-    # Verificar si el cliente ya existe
-    EXISTING_CLIENT=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients?clientId=$client_id" \
-        -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+    # Verificar si existe
+    CLIENT_UUID=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients?clientId=$client_id" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id // empty')
     
-    if [ "$EXISTING_CLIENT" != "null" ] && [ -n "$EXISTING_CLIENT" ]; then
-        echo "  ✓ Client already exists with UUID: $EXISTING_CLIENT"
-        CLIENT_UUID=$EXISTING_CLIENT
+    if [ -n "$CLIENT_UUID" ]; then
+        echo "  ✓ Already exists: $CLIENT_UUID"
     else
-        # Crear cliente SIN accessTokenLifespan en el body principal
-        echo "  → Creating client..."
+        echo "  → Creating..."
         curl -s -X POST "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients" \
             -H "Authorization: Bearer $ADMIN_TOKEN" \
             -H "Content-Type: application/json" \
@@ -90,85 +125,89 @@ create_client() {
                 \"serviceAccountsEnabled\": true,
                 \"secret\": \"$client_secret\",
                 \"standardFlowEnabled\": true,
-                \"directAccessGrantsEnabled\": true
-            }"
+                \"directAccessGrantsEnabled\": true,
+                \"attributes\": {
+                    \"access.token.lifespan\": \"1800\",
+                    \"client.offline.session.idle.timeout\": \"0\",
+                    \"client.offline.session.max.lifespan\": \"0\"
+                }
+            }" > /dev/null
         
-        sleep 1
+        sleep 2
         
-        # Obtener el UUID del cliente
-        echo "  → Obteniendo UUID del cliente..."
         CLIENT_UUID=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients?clientId=$client_id" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" | jq -r '.[0].id')
+            -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].id')
+        
+        if [ -z "$CLIENT_UUID" ] || [ "$CLIENT_UUID" = "null" ]; then
+            echo "  ❌ Failed to create client"
+            return
+        fi
+        echo "  ✓ Created: $CLIENT_UUID"
     fi
     
-    if [ -z "$CLIENT_UUID" ] || [ "$CLIENT_UUID" = "null" ]; then
-        echo "  ❌ Failed to get client UUID for $client_id"
-        return
-    fi
-    
-    echo "  ✓ Client UUID: $CLIENT_UUID"
-    
-    # Configurar tiempos de token específicos para el cliente (usando attributes)
-    echo "  → Configurando tiempos de token para el cliente..."
-    curl -s -X PUT "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID" \
-        -H "Authorization: Bearer $ADMIN_TOKEN" \
-        -H "Content-Type: application/json" \
-        -d "{
-            \"attributes\": {
-                \"access.token.lifespan\": \"3600\",
-                \"refresh.token.lifespan\": \"86400\"
-            }
-        }" || echo "  (Token config may already exist)"
+    # Obtener service account user
+    SA_USER=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/service-account-user" \
+        -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.id // empty')
+    echo "  Service Account: ${SA_USER:-N/A}"
     
     # Crear roles
-    echo "  → Creando roles dentro del cliente..."
-    
+    echo "  → Creating roles..."
     for role in "ama-de-casa" "estudiante" "trabajador"; do
-        echo "    - Creando rol: $role"
-        curl -s -X POST "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/roles" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"name\": \"$role\",
-                \"description\": \"Rol para $role\"
-            }" 2>/dev/null || echo "      (Role may already exist)"
+        EXISTS=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/roles/$role" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.name // empty')
+        
+        if [ "$EXISTS" = "$role" ]; then
+            echo "    - Role '$role' already exists"
+        else
+            curl -s -X POST "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/roles" \
+                -H "Authorization: Bearer $ADMIN_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{\"name\": \"$role\", \"description\": \"Rol $role\"}" > /dev/null
+            echo "    - Role '$role' created"
+        fi
     done
     
     # Crear mappers
-    echo "  → Creando mappers para atributos..."
+    echo "  → Creating mappers..."
     
     create_mapper() {
-        local mapper_name=$1
-        local user_attribute=$2
-        local claim_name=$3
+        local name=$1
+        local attr=$2
+        local claim=$3
         
-        curl -s -X POST "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/protocol-mappers/models" \
-            -H "Authorization: Bearer $ADMIN_TOKEN" \
-            -H "Content-Type: application/json" \
-            -d "{
-                \"name\": \"$mapper_name\",
-                \"protocol\": \"openid-connect\",
-                \"protocolMapper\": \"oidc-usermodel-attribute-mapper\",
-                \"consentRequired\": false,
-                \"config\": {
-                    \"user.attribute\": \"$user_attribute\",
-                    \"claim.name\": \"$claim_name\",
-                    \"access.token.claim\": \"true\",
-                    \"id.token.claim\": \"true\",
-                    \"userinfo.token.claim\": \"true\",
-                    \"jsonType.label\": \"String\"
-                }
-            }" 2>/dev/null || echo "      (Mapper may already exist)"
+        EXISTS=$(curl -s -X GET "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/protocol-mappers/models?name=$name" \
+            -H "Authorization: Bearer $ADMIN_TOKEN" | jq -r '.[0].name // empty')
+        
+        if [ "$EXISTS" = "$name" ]; then
+            echo "    - Mapper '$name' already exists"
+        else
+            curl -s -X POST "$KEYCLOAK_URL/admin/realms/$KEYCLOAK_REALM/clients/$CLIENT_UUID/protocol-mappers/models" \
+                -H "Authorization: Bearer $ADMIN_TOKEN" \
+                -H "Content-Type: application/json" \
+                -d "{
+                    \"name\": \"$name\",
+                    \"protocol\": \"openid-connect\",
+                    \"protocolMapper\": \"oidc-usermodel-attribute-mapper\",
+                    \"consentRequired\": false,
+                    \"config\": {
+                        \"user.attribute\": \"$attr\",
+                        \"claim.name\": \"$claim\",
+                        \"access.token.claim\": \"true\",
+                        \"id.token.claim\": \"true\",
+                        \"userinfo.token.claim\": \"true\",
+                        \"jsonType.label\": \"String\"
+                    }
+                }" > /dev/null
+            echo "    - Mapper '$name' created"
+        fi
     }
     
-    create_mapper "mongoId" "mongoId" "mongoId"
+    create_mapper "postgresId" "postgresId" "postgresId"
     create_mapper "age" "age" "age"
     create_mapper "clientId" "clientId" "clientId"
     create_mapper "role" "role" "role"
     
-    echo "  ✓ Cliente configurado: $client_name"
-    echo ""
+    echo "  ✓ Client configured: $client_name"
 }
 
 # Crear los 3 clientes
@@ -177,12 +216,10 @@ create_client "alcaldia-sogamoso" "$CLIENT_ALCALDIA_SOGAMOSO_SECRET" "Alcaldía 
 create_client "alcaldia-tunja" "$CLIENT_ALCALDIA_TUNJA_SECRET" "Alcaldía de Tunja" "Servicios para la Alcaldía de Tunja"
 
 echo ""
-echo "=== Keycloak initialization completed! ==="
-echo "Configuración:"
-echo "  - Access token lifespan: 3600s (1 hora)"
-echo "  - Refresh token lifespan: 86400s (24 horas)"
-echo ""
-echo "Clientes creados:"
-echo "  ✓ alcaldia-duitama"
-echo "  ✓ alcaldia-sogamoso"
-echo "  ✓ alcaldia-tunja"
+echo "=========================================="
+echo "=== Initialization Complete ==="
+echo "=========================================="
+echo "Realm: $KEYCLOAK_REALM"
+echo "Access Token: 30 min"
+echo "SSO Session: 30 min idle / 24h max"
+echo "Clients: alcaldia-duitama, alcaldia-sogamoso, alcaldia-tunja"

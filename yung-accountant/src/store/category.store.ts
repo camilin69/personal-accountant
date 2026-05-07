@@ -1,78 +1,112 @@
-// store/category.store.ts
-
 import { create } from 'zustand';
-import { persist } from 'zustand/middleware';
+import { categoryService } from '../services/category.service';
 import type { Category } from '../types';
-
-const generateId = () => Date.now().toString();
-
-const defaultCategories: Category[] = [
-  // Income por defecto
-  { id: '1', userId: '1', name: 'Salary', type: 'income', icon: 'Briefcase', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '2', userId: '1', name: 'Freelance', type: 'income', icon: 'Laptop', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '3', userId: '1', name: 'Gift', type: 'income', icon: 'Gift', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '4', userId: '1', name: 'Investment', type: 'income', icon: 'TrendingUp', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  
-  // Nuevas categorías para transferencias entre wallets
-  { id: 'wallet-transfer-income', userId: '1', name: 'Wallet Transfer', type: 'income', icon: 'ArrowLeftRight', color: '#6366F1', isDefault: true, createdAt: new Date().toISOString() },
-  { id: 'wallet-transfer-expense', userId: '1', name: 'Wallet Transfer', type: 'expense', icon: 'ArrowLeftRight', color: '#6366F1', isDefault: true, createdAt: new Date().toISOString() },
-  
-  // Expense por defecto
-  { id: '5', userId: '1', name: 'Food', type: 'expense', icon: 'Utensils', color: '#EF4444', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '6', userId: '1', name: 'Transport', type: 'expense', icon: 'Car', color: '#F59E0B', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '7', userId: '1', name: 'Entertainment', type: 'expense', icon: 'Gamepad2', color: '#A855F7', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '8', userId: '1', name: 'Savings', type: 'expense', icon: 'PiggyBank', color: '#10B981', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '9', userId: '1', name: 'Health', type: 'expense', icon: 'Heart', color: '#EC4899', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '10', userId: '1', name: 'Education', type: 'expense', icon: 'GraduationCap', color: '#6366F1', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '11', userId: '1', name: 'Rent', type: 'expense', icon: 'Home', color: '#FF6584', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '12', userId: '1', name: 'Utilities', type: 'expense', icon: 'Zap', color: '#F59E0B', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '13', userId: '1', name: 'Shopping', type: 'expense', icon: 'ShoppingBag', color: '#EC4899', isDefault: true, createdAt: new Date().toISOString() },
-  { id: '14', userId: '1', name: 'Travel', type: 'expense', icon: 'Plane', color: '#06B6D4', isDefault: true, createdAt: new Date().toISOString() },
-  
-  // Debt categories (solo estos son del sistema y no aparecerán en selección normal)
-  { id: 'borrow-category', userId: '1', name: 'Borrow', type: 'income', icon: 'Wallet', color: '#10B981', isDefault: true, isSystem: true, createdAt: new Date().toISOString() },
-  { id: 'lent-category', userId: '1', name: 'Lent', type: 'expense', icon: 'HandCoins', color: '#EF4444', isDefault: true, isSystem: true, createdAt: new Date().toISOString() },
-  { id: 'debt-payment-default', userId: '1', name: 'Debt Payment', type: 'expense', icon: 'CreditCard', color: '#EF4444', isDefault: true, isSystem: true, createdAt: new Date().toISOString() },
-  { id: 'debt-collection-default', userId: '1', name: 'Debt Collection', type: 'income', icon: 'Wallet', color: '#10B981', isDefault: true, isSystem: true, createdAt: new Date().toISOString() },
-];
 
 interface CategoryStore {
   categories: Category[];
-  setCategories: (categories: Category[]) => void;
-  addCategory: (category: Omit<Category, 'id' | 'createdAt' | 'userId'>, userId : string) => void;
-  updateCategory: (id: string, updates: Partial<Category>) => void;
-  deleteCategory: (id: string) => void;
+  isLoading: boolean;
+  error: string | null;
+  lastFetch: number | null;
+  ttl: number;
+
+  fetchAllCategories: (forceRefresh?: boolean) => Promise<void>;
+  addCategory: (data: { name: string; type: 'income' | 'expense'; icon: string; color: string }) => Promise<Category | null>;
+  updateCategory: (id: string, updates: Partial<Category>) => Promise<boolean>;
+  deleteCategory: (id: string) => Promise<boolean>;
+  clearCache: () => void;
+  clearError: () => void;
 }
 
-export const useCategoryStore = create<CategoryStore>()(
-  persist(
-    (set) => ({
-      categories: defaultCategories,
-      
-      setCategories: (categories) => set({ categories }),
-      
-      addCategory: (category, userId) => {
-        const newCategory: Category = {
-          ...category,
-          id: generateId(),
-          userId: userId,
-          createdAt: new Date().toISOString(),
-        };
-        set((state) => ({ categories: [...state.categories, newCategory] }));
-      },
-      
-      updateCategory: (id, updates) => {
-        set((state) => ({
-          categories: state.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
-        }));
-      },
-      
-      deleteCategory: (id) => {
-        set((state) => ({
-          categories: state.categories.filter((c) => c.id !== id),
-        }));
-      },
-    }),
-    { name: 'yung-accountant-categories' }
-  )
-);
+export const useCategoryStore = create<CategoryStore>()((set, get) => ({
+  categories: [],
+  isLoading: false,
+  error: null,
+  lastFetch: null,
+  ttl: 5 * 60 * 1000,
+
+  fetchAllCategories: async (forceRefresh = false) => {
+    const { lastFetch, ttl, categories } = get();
+
+    if (!forceRefresh && lastFetch && (Date.now() - lastFetch) < ttl && categories.length > 0) {
+      return;
+    }
+
+    set({ isLoading: true, error: null });
+
+    try {
+      const allCategories = await categoryService.getAllCategories();
+      set({
+        categories: allCategories,
+        lastFetch: Date.now(),
+        isLoading: false,
+      });
+    } catch (error: any) {
+      set({ error: error.message || 'Error al cargar categorías', isLoading: false });
+    }
+  },
+
+  addCategory: async (data) => {
+    set({ isLoading: true, error: null });
+    try {
+      const newCategory = await categoryService.createUserCategory({
+        name: data.name,
+        type: data.type,
+        icon: data.icon,
+        color: data.color,
+        isDefault: false,
+      });
+
+      set((state) => ({
+        categories: [...state.categories, newCategory],
+        isLoading: false,
+      }));
+
+      return newCategory;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      return null;
+    }
+  },
+
+  updateCategory: async (id, updates) => {
+    set({ isLoading: true, error: null });
+    try {
+      await categoryService.updateUserCategory(id, {
+        name: updates.name,
+        type: updates.type,
+        icon: updates.icon,
+        color: updates.color,
+      });
+
+      set((state) => ({
+        categories: state.categories.map((c) => (c.id === id ? { ...c, ...updates } : c)),
+        isLoading: false,
+      }));
+
+      return true;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      return false;
+    }
+  },
+
+  deleteCategory: async (id) => {
+    set({ isLoading: true, error: null });
+    try {
+      await categoryService.deleteUserCategory(id);
+
+      set((state) => ({
+        categories: state.categories.filter((c) => c.id !== id),
+        isLoading: false,
+      }));
+
+      return true;
+    } catch (error: any) {
+      set({ error: error.message, isLoading: false });
+      return false;
+    }
+  },
+
+  clearCache: () => set({ lastFetch: null }),
+  clearError: () => set({ error: null }),
+}));

@@ -1,8 +1,8 @@
 // services/api/endpoints.ts
 export const MICROSERVICES = {
   AUTH: import.meta.env.VITE_AUTH_SERVICE_URL || 'http://localhost:8081',
-  POSTS: import.meta.env.VITE_POSTS_SERVICE_URL || 'http://localhost:8082',
-  FINANCIAL: import.meta.env.VITE_FINANCIAL_SERVICE_URL || 'http://localhost:8083',
+  CATEGORIES: import.meta.env.VITE_CATEGORIES_SERVICE_URL || 'http://localhost:8082',
+  POSTS: import.meta.env.VITE_POSTS_SERVICE_URL || 'http://localhost:8085',
 } as const;
 
 export const ENDPOINTS = {
@@ -29,6 +29,10 @@ export const ENDPOINTS = {
     COMMENT_BY_ID: (postId: string, commentId: string) => `${MICROSERVICES.POSTS}/posts/${postId}/comments/${commentId}`,
     REPLY: (postId: string, commentId: string) => `${MICROSERVICES.POSTS}/posts/${postId}/comments/${commentId}/replies`,
     LIKE_COMMENT: (postId: string, commentId: string) => `${MICROSERVICES.POSTS}/posts/${postId}/comments/${commentId}/like`,
+  },
+  CATEGORIES: {
+    BASE: `${MICROSERVICES.CATEGORIES}/categories`,
+    BY_ID: (id: string) => `${MICROSERVICES.CATEGORIES}/categories/${id}`,
   },
   META: {
     CLIENTS: `${MICROSERVICES.AUTH}/clients`,

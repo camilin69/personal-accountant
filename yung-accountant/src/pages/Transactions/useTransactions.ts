@@ -1,13 +1,12 @@
 // pages/Transactions/useTransactions.ts
 
-import { useState, useMemo, useEffect } from 'react';
+import { useState, useMemo, useEffect, useRef } from 'react';
 import { useSearchParams } from 'react-router-dom';
 import { useTransactionStore, useCategoryStore, useWalletStore } from '../../store';
 
 export const useTransactions = () => {
   const [searchParams] = useSearchParams();
   const { transactions, deleteTransaction } = useTransactionStore();
-  const { categories } = useCategoryStore();
   const { wallets } = useWalletStore();
   
   const [searchTerm, setSearchTerm] = useState('');
@@ -26,6 +25,9 @@ export const useTransactions = () => {
   const [showToast, setShowToast] = useState(false);
   const [toastMessage, setToastMessage] = useState('');
   const [toastType, setToastType] = useState<'success' | 'error' | 'warning' | 'info'>('success');
+  const { categories, fetchAllCategories } = useCategoryStore();
+  const fetchedRef = useRef(false);
+
 
   useEffect(() => {
     const searchQuery = searchParams.get('search');
@@ -38,8 +40,16 @@ export const useTransactions = () => {
   const getWalletById = (id: string) => wallets.find(w => w.id === id);
 
   
-  const incomeCategories = categories.filter(c => c.type === 'income' && !c.isSystem);
-  const expenseCategories = categories.filter(c => c.type === 'expense' && !c.isSystem);
+  
+  useEffect(() => {
+    if (!fetchedRef.current && categories.length === 0) {
+      fetchedRef.current = true;
+      fetchAllCategories();
+    }
+  }, [categories.length, fetchAllCategories]);
+
+  const incomeCategories = categories.filter(c => c.type === 'income');
+  const expenseCategories = categories.filter(c => c.type === 'expense');
 
   const filteredTransactions = useMemo(() => {
     let filtered = [...transactions];
@@ -180,6 +190,7 @@ export const useTransactions = () => {
     stats,
     incomeCategories,
     expenseCategories,
+    categories,
     selectedTransactionDetails,
     wallets,
     // Funciones

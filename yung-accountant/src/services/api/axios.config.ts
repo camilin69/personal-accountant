@@ -32,6 +32,16 @@ export const postsAxios = axios.create({
   withCredentials: true,
 });
 
+// Cliente para Categories
+export const categoriesAxios = axios.create({
+  baseURL: MICROSERVICES.CATEGORIES,
+  timeout: 10000,
+  headers: {
+    'Content-Type': 'application/json',
+  },
+  withCredentials: true,
+});
+
 // Cliente base
 export const axiosInstance = axios.create({
   timeout: 10000,
@@ -60,6 +70,7 @@ const attachToken = (config: any) => {
 authAxios.interceptors.request.use(attachToken);
 usersAxios.interceptors.request.use(attachToken);
 postsAxios.interceptors.request.use(attachToken);
+categoriesAxios.interceptors.request.use(attachToken);
 axiosInstance.interceptors.request.use(attachToken);
 
 // Interceptor para manejar refresh token
@@ -82,6 +93,7 @@ const handleUnauthorized = async (error: any) => {
     
     try {
       const refreshToken = localStorage.getItem('refresh_token');
+      const clientId = localStorage.getItem('client_id');
       if (!refreshToken) {
         throw new Error('No refresh token');
       }
@@ -89,7 +101,7 @@ const handleUnauthorized = async (error: any) => {
       // Usar una instancia limpia para evitar loops
       const response = await axios.post(
         `${MICROSERVICES.AUTH}/auth/refresh`, 
-        { refreshToken },
+        { refreshToken, clientId },
         { 
           headers: { 'Content-Type': 'application/json' },
           timeout: 10000 
@@ -121,4 +133,5 @@ const handleUnauthorized = async (error: any) => {
 authAxios.interceptors.response.use((response) => response, handleUnauthorized);
 usersAxios.interceptors.response.use((response) => response, handleUnauthorized);
 postsAxios.interceptors.response.use((response) => response, handleUnauthorized);
+categoriesAxios.interceptors.response.use((response) => response, handleUnauthorized);
 axiosInstance.interceptors.response.use((response) => response, handleUnauthorized);

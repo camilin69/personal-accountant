@@ -1,514 +1,232 @@
-// store/user.store.ts
+// store/user.store.ts - Versión Optimizada
 import { create } from 'zustand';
 import { persist } from 'zustand/middleware';
-import { authService } from '../services';
-import { userService } from '../services/user.service';
-import { AppError, ErrorCode, mapBackendError, type ErrorCodeType } from '../services/types/error.types';
-import type { 
-  RegisterRequest, 
-  UpdateUserRequest,
-  UserProfile 
-} from '../services/types/user.types';
+import { authService, userService } from '../services';
+import type { UserProfile, UpdateUserRequest, RegisterRequest } from '../services/types/user.types';
 
 interface UserStore {
-  // Tokens
   accessToken: string | null;
   refreshToken: string | null;
   
-  // Usuario cacheado
   user: UserProfile | null;
+  userLastFetch: number | null;
+  userTTL: number;
   
   // Estado
   isLoading: boolean;
-  error: AppError | null;
-  errorCode: ErrorCodeType | null;
+  error: string | null;
   isAuthenticated: boolean;
   isInitialized: boolean;
-  tokenExpiresAt: number | null;
   
-  // Callbacks para UI
-  onError?: (error: AppError) => void;
-  onSuccess?: (message: string) => void;
-  
-  // Acciones de autenticación
+  // Acciones
   login: (email: string, password: string) => Promise<void>;
-  register: (userData: RegisterRequest) => Promise<void>;
+  register: (data: RegisterRequest) => Promise<void>;
   logout: () => Promise<void>;
   refreshSession: () => Promise<boolean>;
   initialize: () => Promise<void>;
   
-  // Acciones de perfil
   loadUserProfile: (forceRefresh?: boolean) => Promise<UserProfile | null>;
   updateProfile: (data: UpdateUserRequest) => Promise<UserProfile | null>;
   deleteAccount: () => Promise<void>;
   
-  // Acciones sociales
-  followUser: (targetUserId: string) => Promise<void>;
-  unfollowUser: (targetUserId: string) => Promise<void>;
+  followUser: (userId: string) => Promise<void>;
+  unfollowUser: (userId: string) => Promise<void>;
   
-  // Setters
-  setLoading: (isLoading: boolean) => void;
-  setError: (error: AppError | null) => void;
-  clearError: () => void;
   clearCache: () => void;
-  setCallbacks: (onError: (error: AppError) => void, onSuccess: (message: string) => void) => void;
+  clearError: () => void;
 }
 
-// Helper para decodificar el token
-const getTokenExpiry = (token: string): number | null => {
-  try {
-    const payload = JSON.parse(atob(token.split('.')[1]));
-    return payload.exp * 1000;
-  } catch {
-    return null;
-  }
-};
-
-let refreshTimeoutId: number | null = null;
+const USER_CACHE_TTL = 5 * 60 * 1000; // 5 minutos
 
 export const useUserStore = create<UserStore>()(
   persist(
-    (set, get) => {
-      const clearRefreshTimeout = () => {
-        if (refreshTimeoutId !== null) {
-          clearTimeout(refreshTimeoutId);
-          refreshTimeoutId = null;
-        }
-      };
+    (set, get) => ({
+      accessToken: null,
+      refreshToken: null,
+      user: null,
+      userLastFetch: null,
+      userTTL: USER_CACHE_TTL,
+      isLoading: false,
+      error: null,
+      isAuthenticated: false,
+      isInitialized: false,
+      clearError: () => set({ error: null }),
       
-      const scheduleTokenRefresh = () => {
-        clearRefreshTimeout();
+      initialize: async () => {
+        const accessToken = localStorage.getItem('access_token');
+        const refreshToken = localStorage.getItem('refresh_token');
         
-        const { accessToken } = get();
-        if (!accessToken) return;
-        
-        const expiresAt = getTokenExpiry(accessToken);
-        if (!expiresAt) return;
-        
-        const now = Date.now();
-        const timeUntilExpiry = expiresAt - now;
-        const refreshTime = Math.max(timeUntilExpiry - 5 * 60 * 1000, 0);
-        
-        if (refreshTime > 0) {
-          refreshTimeoutId = window.setTimeout(() => {
-            get().refreshSession();
-          }, refreshTime);
+        if (refreshToken) {
+          set({ 
+            accessToken, 
+            refreshToken, 
+            isAuthenticated: true,
+            isInitialized: true 
+          });
+          
+          // Cargar perfil en background
+          get().loadUserProfile();
+        } else {
+          set({ isInitialized: true });
         }
-      };
-
-      const getErrorMessage = (error: AppError): string => {
-        switch (error.code) {
-          case ErrorCode.INVALID_CREDENTIALS:
-            return 'Invalid email or password. Please check your credentials.';
-          case ErrorCode.USER_NOT_FOUND:
-            return 'No account found with this email. Please register first.';
-          case ErrorCode.EMAIL_ALREADY_REGISTERED:
-            return 'Email already registered. Please use a different email.';
-          case ErrorCode.INVALID_ROLE:
-            return 'Invalid role specified.';
-          case ErrorCode.INVALID_CLIENT_ID:
-            return 'Invalid client ID.';
-          case ErrorCode.TOKEN_EXPIRED:
-            return 'Session expired. Please login again.';
-          case ErrorCode.TOKEN_INVALID:
-            return 'Invalid session. Please login again.';
-          case ErrorCode.NETWORK_ERROR:
-            return 'Network error. Please check your internet connection.';
-          case ErrorCode.TIMEOUT_ERROR:
-            return 'Request timeout. Please try again.';
-          case ErrorCode.SERVER_ERROR:
-            return 'Server error. Please try again later.';
-          default:
-            return error.message || 'An error occurred. Please try again.';
-        }
-      };
+      },
       
-      return {
-        accessToken: null,
-        refreshToken: null,
-        user: null,
-        isLoading: false,
-        error: null,
-        errorCode: null,
-        isAuthenticated: false,
-        isInitialized: false,
-        tokenExpiresAt: null,
+      loadUserProfile: async (forceRefresh = false) => {
+        const { user, userLastFetch, userTTL, isAuthenticated, refreshSession } = get();
         
-        setLoading: (isLoading) => set({ isLoading }),
-        setError: (error) => set({ error, errorCode: error?.code || null }),
-        clearError: () => set({ error: null, errorCode: null }),
-        clearCache: () => set({ user: null }),
+        if (!isAuthenticated) return null;
         
-        setCallbacks: (onError, onSuccess) => set({ onError, onSuccess }),
+        // Usar caché de memoria si es válido
+        if (!forceRefresh && user && userLastFetch && 
+            (Date.now() - userLastFetch) < userTTL) {
+          console.log('[UserStore] Using memory cached user');
+          return user;
+        }
         
-        initialize: async () => {
-          set({ isLoading: true });
-          
-          try {
-            const accessToken = localStorage.getItem('access_token');
-            const refreshToken = localStorage.getItem('refresh_token');
-            
-            if (!refreshToken) {
-              set({ 
-                accessToken: null,
-                refreshToken: null,
-                user: null,
-                isAuthenticated: false,
-                isLoading: false,
-                isInitialized: true 
-              });
-              return;
+        set({ isLoading: true });
+        
+        try {
+          const profile = await userService.getMyProfile();
+          set({ 
+            user: profile, 
+            userLastFetch: Date.now(),
+            isLoading: false 
+          });
+          return profile;
+        } catch (error: any) {
+          if (error.response?.status === 401) {
+            const refreshed = await refreshSession();
+            if (refreshed) {
+              const profile = await userService.getMyProfile();
+              set({ user: profile, userLastFetch: Date.now(), isLoading: false });
+              return profile;
             }
-            
-            set({ accessToken, refreshToken, isAuthenticated: true });
-            
-            const cachedUser = localStorage.getItem('cached_user');
-            if (cachedUser) {
-              try {
-                const user = JSON.parse(cachedUser);
-                set({ user });
-              } catch (e) {
-                console.error('Error parsing cached user:', e);
-              }
-            }
-            
-            const expiresAt = getTokenExpiry(accessToken || '');
-            const isValid = expiresAt ? Date.now() < expiresAt : false;
-            
-            if (!isValid && accessToken) {
-              const refreshed = await get().refreshSession();
-              if (refreshed) {
-                await get().loadUserProfile(true);
-              }
-            } else if (accessToken) {
-              scheduleTokenRefresh();
-            }
-            
-            set({ 
-              isLoading: false,
-              isInitialized: true 
-            });
-            
-          } catch (error) {
-            console.error('Error initializing auth:', error);
-            set({ 
-              isAuthenticated: false,
-              isLoading: false,
-              isInitialized: true,
-              accessToken: null,
-              refreshToken: null,
-              user: null
-            });
           }
-        },
+          set({ isLoading: false, error: error.message });
+          return null;
+        }
+      },
+      
+      updateProfile: async (data) => {
+        set({ isLoading: true });
         
-        refreshSession: async (): Promise<boolean> => {
-          const { refreshToken } = get();
-          if (!refreshToken) return false;
+        try {
+          await userService.updateMyProfile(data);
+          const updatedProfile = await userService.getMyProfile();
           
-          set({ isLoading: true });
+          set({ 
+            user: updatedProfile, 
+            userLastFetch: Date.now(),
+            isLoading: false 
+          });
           
-          try {
-            const response = await authService.refreshToken();
-            if (response) {
-              const newExpiresAt = getTokenExpiry(response.token);
-              
-              set({ 
-                accessToken: response.token,
-                refreshToken: response.refreshToken,
-                tokenExpiresAt: newExpiresAt,
-                isLoading: false,
-                isAuthenticated: true 
-              });
-              
-              scheduleTokenRefresh();
-              return true;
-            }
-          } catch (error) {
-            console.error('Refresh session failed:', error);
-            set({ isLoading: false });
-          }
-          
-          return false;
-        },
+          return updatedProfile;
+        } catch (error: any) {
+          set({ isLoading: false, error: error.message });
+          throw error;
+        }
+      },
+      
+      refreshSession: async () => {
+        const { refreshToken } = get();
+        if (!refreshToken) return false;
         
-        // store/user.store.ts - Parte de la función login
-        login: async (email, password) => {
-          set({ isLoading: true, error: null, errorCode: null });
-          try {
-            console.log('Login attempt for:', email);
-            const response = await authService.login({ email, password });
-            console.log('Login success:', response);
-            const expiresAt = getTokenExpiry(response.token);
-            
+        try {
+          const response = await authService.refreshToken();
+          if (response) {
             set({ 
               accessToken: response.token,
               refreshToken: response.refreshToken,
-              tokenExpiresAt: expiresAt,
-              isLoading: false, 
-              isAuthenticated: true,
-              error: null,
-              errorCode: null
+              isAuthenticated: true 
+            });
+            return true;
+          }
+        } catch (error) {
+          console.error('Refresh failed:', error);
+        }
+        
+        return false;
+      },
+      
+      login: async (email, password) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+            const response = await authService.login({ email, password });
+            
+            // localStorage para tokens (lo necesita el interceptor)
+            localStorage.setItem('access_token', response.token);
+            localStorage.setItem('refresh_token', response.refreshToken);
+            localStorage.setItem('client_id', response.clientId); // Solo aquí
+            
+            // Store para la UI
+            set({
+                accessToken: response.token,
+                refreshToken: response.refreshToken,
+                isAuthenticated: true,
+                isLoading: false
+                // NO guardar clientId aquí, ya está en user.clientId
             });
             
-            scheduleTokenRefresh();
             await get().loadUserProfile(true);
-            
-            const { onSuccess } = get();
-            if (onSuccess) {
-              onSuccess('Login successful. Welcome back!');
-            }
-            
-          } catch (error: any) {
-            console.log('Login error caught in store:', error);
-            
-            // Usar el mapper de errores
-            const appError = error instanceof AppError 
-              ? error 
-              : mapBackendError(error);
-            
-            console.log('Mapped error:', appError);
-            
-            set({ 
-              error: appError, 
-              errorCode: appError.code,
-              isLoading: false, 
-              isAuthenticated: false,
-              accessToken: null,
-              refreshToken: null
-            });
-            
-            // Limpiar tokens en caso de error
-            localStorage.removeItem('access_token');
-            localStorage.removeItem('refresh_token');
-            
-            const { onError } = get();
-            if (onError) {
-              onError(appError);
-            }
-            
-            throw appError;
-          }
-        },
-        
-        register: async (userData) => {
-          set({ isLoading: true, error: null, errorCode: null });
-          try {
-            await authService.register(userData);
-            await get().login(userData.email, userData.password);
-            set({ isLoading: false });
-            
-            const { onSuccess } = get();
-            if (onSuccess) {
-              onSuccess('Registration successful! Welcome!');
-            }
-            
-          } catch (error) {
-            const appError = error as AppError;
-            const errorMessage = getErrorMessage(appError);
-            appError.message = errorMessage;
-            
-            set({ error: appError, errorCode: appError.code, isLoading: false });
-            
-            const { onError } = get();
-            if (onError) {
-              onError(appError);
-            }
-            
-            throw appError;
-          }
-        },
-        
-        logout: async () => {
-          clearRefreshTimeout();
-          set({ isLoading: true });
-          try {
-            await authService.logout();
-            set({ 
-              accessToken: null,
-              refreshToken: null,
-              user: null,
-              tokenExpiresAt: null,
-              isLoading: false, 
-              isAuthenticated: false,
-              error: null,
-              errorCode: null
-            });
-            localStorage.removeItem('cached_user');
-            
-            const { onSuccess } = get();
-            if (onSuccess) {
-              onSuccess('Logged out successfully');
-            }
-            
-          } catch (error) {
-            console.error('Logout error:', error);
-            set({ 
-              accessToken: null,
-              refreshToken: null,
-              user: null,
-              tokenExpiresAt: null,
-              isLoading: false, 
-              isAuthenticated: false,
-              error: null,
-              errorCode: null
-            });
-            localStorage.removeItem('cached_user');
-          }
-        },
-        
-        loadUserProfile: async (forceRefresh = false): Promise<UserProfile | null> => {
-          const { user, isAuthenticated, refreshSession } = get();
-          
-          if (!isAuthenticated) return null;
-          
-          if (user && !forceRefresh) {
-            return user;
-          }
-          
-          set({ isLoading: true });
-          
-          try {
-            const profile = await userService.getMyProfile();
-            if (profile) {
-              localStorage.setItem('cached_user', JSON.stringify(profile));
-              set({ user: profile, isLoading: false });
-              return profile;
-            }
-          } catch (error: any) {
-            if (error.response?.status === 401) {
-              const refreshed = await refreshSession();
-              if (refreshed) {
-                const profile = await userService.getMyProfile();
-                if (profile) {
-                  localStorage.setItem('cached_user', JSON.stringify(profile));
-                  set({ user: profile, isLoading: false });
-                  return profile;
-                }
-              }
-            }
-            console.error('Error loading user profile:', error);
-            set({ isLoading: false });
-          }
-          
-          return null;
-        },
-        
-        updateProfile: async (data): Promise<UserProfile | null> => {
-          const { isAuthenticated, refreshSession, onSuccess, onError } = get();
-          
-          if (!isAuthenticated) return null;
-          
-          set({ isLoading: true });
-          
-          try {
-            await userService.updateMyProfile(data);
-            const updatedProfile = await userService.getMyProfile();
-            if (updatedProfile) {
-              localStorage.setItem('cached_user', JSON.stringify(updatedProfile));
-              set({ user: updatedProfile, isLoading: false });
-              
-              if (onSuccess) {
-                onSuccess('Profile updated successfully');
-              }
-              
-              return updatedProfile;
-            }
-          } catch (error: any) {
-            if (error.response?.status === 401) {
-              const refreshed = await refreshSession();
-              if (refreshed) {
-                const updatedProfile = await userService.getMyProfile();
-                if (updatedProfile) {
-                  localStorage.setItem('cached_user', JSON.stringify(updatedProfile));
-                  set({ user: updatedProfile, isLoading: false });
-                  
-                  if (onSuccess) {
-                    onSuccess('Profile updated successfully');
-                  }
-                  
-                  return updatedProfile;
-                }
-              }
-            }
-            
-            const appError = error as AppError;
-            if (onError) {
-              onError(appError);
-            }
-            
-            console.error('Error updating profile:', error);
-            set({ isLoading: false });
+        } catch (error: any) {
+            set({ error: error.message, isLoading: false, isAuthenticated: false });
             throw error;
-          }
-          
-          return null;
-        },
-        
-        deleteAccount: async () => {
-          const { isAuthenticated, onSuccess, onError } = get();
-          if (!isAuthenticated) return;
-          
-          try {
-            await userService.deleteMyAccount();
-            await get().logout();
-            
-            if (onSuccess) {
-              onSuccess('Account deleted successfully');
-            }
-            
-          } catch (error) {
-            const appError = error as AppError;
-            if (onError) {
-              onError(appError);
-            }
-            console.error('Error deleting account:', error);
-            throw error;
-          }
-        },
-        
-        followUser: async (targetUserId: string) => {
-          const { onSuccess, onError } = get();
-          try {
-            await userService.followUser(targetUserId);
-            if (onSuccess) {
-              onSuccess('User followed successfully');
-            }
-          } catch (error) {
-            const appError = error as AppError;
-            if (onError) {
-              onError(appError);
-            }
-            console.error('Error following user:', error);
-            throw error;
-          }
-        },
-        
-        unfollowUser: async (targetUserId: string) => {
-          const { onSuccess, onError } = get();
-          try {
-            await userService.unfollowUser(targetUserId);
-            if (onSuccess) {
-              onSuccess('User unfollowed successfully');
-            }
-          } catch (error) {
-            const appError = error as AppError;
-            if (onError) {
-              onError(appError);
-            }
-            console.error('Error unfollowing user:', error);
-            throw error;
-          }
-        },
-      };
+        }
     },
+
+      
+      register: async (data) => {
+        set({ isLoading: true, error: null });
+        
+        try {
+          await authService.register(data);
+          await get().login(data.email, data.password);
+          set({ isLoading: false });
+        } catch (error: any) {
+          set({ error: error.message, isLoading: false });
+          throw error;
+        }
+      },
+      
+      logout: async () => {
+          await authService.logout();
+          localStorage.removeItem('access_token');
+          localStorage.removeItem('refresh_token');
+          localStorage.removeItem('client_id');
+          set({
+              accessToken: null, refreshToken: null, user: null,
+              userLastFetch: null, isAuthenticated: false,
+              isLoading: false, error: null
+          });
+      },
+      
+      deleteAccount: async () => {
+        await userService.deleteMyAccount();
+        await get().logout();
+      },
+      
+      followUser: async (userId) => {
+        await userService.followUser(userId);
+        // Invalidar caché del perfil (ya que followers cambió)
+        set({ userLastFetch: null });
+      },
+      
+      unfollowUser: async (userId) => {
+        await userService.unfollowUser(userId);
+        set({ userLastFetch: null });
+      },
+      
+      clearCache: () => {
+        set({ userLastFetch: null });
+      }
+    }),
     {
       name: 'yung-accountant-auth',
       partialize: (state) => ({
         accessToken: state.accessToken,
         refreshToken: state.refreshToken,
         isAuthenticated: state.isAuthenticated,
-        user: state.user,
       }),
     }
   )

@@ -9,6 +9,7 @@
 #include "database.hpp"
 #include "keycloak_auth.hpp"
 #include "kafka_producer.hpp"
+#include "redis_client.hpp"
 
 namespace beast = boost::beast;
 namespace http = beast::http;
@@ -58,7 +59,6 @@ void emitAuthEvent(const std::string& event_type,
         event["timestamp"] = std::time(nullptr);
         event["status_code"] = status_code;
         
-        // Agregar datos adicionales
         for (const auto& [key, value] : extra_data) {
             event[key] = value;
         }
@@ -77,30 +77,23 @@ void emitAuthEvent(const std::string& event_type,
 }
 
 std::string getAllowedOrigin(const http::request<http::string_body>& req) {
-    // Orígenes permitidos
     const std::vector<std::string> allowedOrigins = {
-        "http://localhost:5173",  // Vite dev
-        "http://localhost:3000",  // React dev alternativo
-        "https://tu-dominio.com"   // Producción
+        "http://localhost:5173",
+        "http://localhost:3000",
+        "https://tu-dominio.com"
     };
     
     auto it = req.find(http::field::origin);
     if (it != req.end()) {
         std::string origin = std::string(it->value().begin(), it->value().end());
-        
-        // Verificar si el origen está permitido
         for (const auto& allowed : allowedOrigins) {
-            if (origin == allowed) {
-                return origin;
-            }
+            if (origin == allowed) return origin;
         }
     }
     
-    // Origen por defecto (solo para desarrollo)
     return "http://localhost:5173";
 }
 
-// Modifica addCorsHeaders para recibir la request
 void addCorsHeaders(http::response<http::string_body>& res, 
                     const http::request<http::string_body>& req) {
     std::string origin = getAllowedOrigin(req);
@@ -129,7 +122,6 @@ std::string urlDecode(const std::string& encoded) {
     return decoded;
 }
 
-
 class HttpSession : public std::enable_shared_from_this<HttpSession> {
     tcp::socket socket_;
     beast::flat_buffer buffer_;
@@ -150,6 +142,7 @@ private:
     }
     
     void handle_request() {
+        std::cout << "[REQUEST] " << req_.method_string() << " " << req_.target() << std::endl;
         if (req_.method() == http::verb::options) {
             http::response<http::string_body> res{http::status::ok, req_.version()};
             addCorsHeaders(res, req_);
@@ -157,6 +150,7 @@ private:
             write_response(res);
             return;
         }
+        
         http::response<http::string_body> res{http::status::ok, req_.version()};
         res.set(http::field::server, "Auth Service");
         addCorsHeaders(res, req_);
@@ -165,30 +159,24 @@ private:
         try {
             std::string target(req_.target().begin(), req_.target().end());
             
-            // Registro
             if (req_.method() == http::verb::post && target == "/users/register") {
                 handle_register(res);
             }
-            // Login
             else if (req_.method() == http::verb::post && target == "/auth/login") {
                 handle_login(res);
             }
-            // Logout
             else if (req_.method() == http::verb::post && target == "/auth/logout") {
                 handle_logout(res);
             }
-            // Obtener mi perfil
             else if (req_.method() == http::verb::get && target == "/users/me") {
                 handle_get_me(res);
             }
             else if (req_.method() == http::verb::get && target.find("/users/by-email/") == 0) {
                 handle_get_user_by_email(res);
             }
-            // Actualizar mi perfil
             else if (req_.method() == http::verb::put && target == "/users/update") {
                 handle_update_me(res);
             }
-            // Eliminar mi perfil
             else if (req_.method() == http::verb::delete_ && target == "/users/delete") {
                 handle_delete_me(res);
             }
@@ -216,10 +204,14 @@ private:
             else if (req_.method() == http::verb::get && target == "/roles") {
                 handle_get_roles(res);
             }
-            // Health check
+            else if (req_.method() == http::verb::post && target == "/cache/invalidate") {
+                handle_invalidate_cache(res);
+            }
             else if (req_.method() == http::verb::get && target == "/health") {
                 json::object response;
                 response["status"] = "ok";
+                response["service"] = "auth";
+                response["redis"] = redis::RedisClient::getInstance().isConnected();
                 res.body() = json::serialize(response);
             }
             else {
@@ -238,6 +230,29 @@ private:
         
         res.prepare_payload();
         write_response(res);
+    }
+
+    void handle_invalidate_cache(http::response<http::string_body>& res) {
+        keycloak::UserInfo userInfo = verifyAndGetUser(req_);
+        if (!userInfo.isValid) {
+            res.result(http::status::unauthorized);
+            json::object error;
+            error["error"] = "Token inválido o expirado";
+            res.body() = json::serialize(error);
+            return;
+        }
+        
+        // Invalidar usando Redis directamente
+        auto& redis = redis::RedisClient::getInstance();
+        if (redis.isConnected()) {
+            redis.del("user:id:" + userInfo.postgresId);
+            redis.del("user:email:" + userInfo.email);
+        }
+        
+        json::object response;
+        response["message"] = "Cache invalidado exitosamente";
+        res.result(http::status::ok);
+        res.body() = json::serialize(response);
     }
 
     void handle_get_me(http::response<http::string_body>& res) {
@@ -295,7 +310,6 @@ private:
                         {{"reason", "user_not_found"}});
         }
     }
-
     
     void handle_register(http::response<http::string_body>& res) {
         try {
@@ -340,7 +354,7 @@ private:
                 return;
             }
             
-            // 1. VERIFICAR SI EL EMAIL YA EXISTE EN MONGODB
+            // 1. VERIFICAR SI EL EMAIL YA EXISTE EN POSTGRESQL
             auto existingUser = UserService::getInstance().getUserByEmail(email);
             if (existingUser) {
                 int status_code = static_cast<int>(http::status::conflict);
@@ -351,7 +365,7 @@ private:
                 res.body() = json::serialize(error);
                 
                 emitAuthEvent("registration_failed", "", email, status_code,
-                             {{"reason", "email_already_exists_in_mongodb"}});
+                             {{"reason", "email_already_exists_in_postgres"}});
                 return;
             }
             
@@ -370,8 +384,8 @@ private:
                 return;
             }
             
-            // 3. Crear usuario en MongoDB
-            User user;
+            // 3. Crear usuario en PostgreSQL
+            user::User user;
             user.email = email;
             user.firstName = firstName;
             user.lastName = lastName;
@@ -383,49 +397,51 @@ private:
             user.createdAt = std::ctime(&t);
             user.createdAt.pop_back();
             
-            std::string mongoId;
-            bool mongoOk = UserService::getInstance().createUser(user, mongoId);
+            std::string postgresId;  
+            bool pgOk = UserService::getInstance().createUser(user, postgresId);
             
-            if (!mongoOk) {
+            if (!pgOk) {
                 int status_code = static_cast<int>(http::status::internal_server_error);
                 res.result(status_code);
                 json::object error;
-                error["error"] = "Error guardando usuario en MongoDB";
+                error["error"] = "Error guardando usuario en PostgreSQL";
                 res.body() = json::serialize(error);
                 
                 emitAuthEvent("registration_failed", "", email, status_code,
-                             {{"reason", "mongodb_error"}});
+                            {{"reason", "postgresql_error"}});
                 return;
             }
             
             // 4. Registrar en Keycloak
             std::string keycloakId;
             bool keycloakOk = keycloakClient->registerUser(
-                email, password, firstName, lastName, age, clientId, role, mongoId, keycloakId);
+                email, password, firstName, lastName, age, clientId, role, postgresId, keycloakId);
             
             if (!keycloakOk) {
-                // Rollback: eliminar usuario de MongoDB
-                UserService::getInstance().deleteUser(mongoId);
+                // Rollback: eliminar usuario de PostgreSQL
+                UserService::getInstance().deleteUser(postgresId);
                 int status_code = static_cast<int>(http::status::internal_server_error);
                 res.result(status_code);
                 json::object error;
                 error["error"] = "Error registrando usuario en Keycloak";
                 res.body() = json::serialize(error);
                 
-                emitAuthEvent("registration_failed", mongoId, email, status_code,
-                             {{"reason", "keycloak_error"}});
+                emitAuthEvent("registration_failed", postgresId, email, status_code,
+                            {{"reason", "keycloak_error"}});
                 return;
             }
             
-            // 5. Actualizar MongoDB con el keycloakId
-            UserService::getInstance().updateKeycloakId(mongoId, keycloakId);
+            // 5. Actualizar PostgreSQL con el keycloakId
+            UserService::getInstance().updateKeycloakId(postgresId, keycloakId);
             
-            // 6. Registro exitoso
+            // 6. Invalidar caché (por si acaso)
+            
+            // 7. Registro exitoso
             int status_code = static_cast<int>(http::status::created);
             res.result(status_code);
             json::object response;
             response["message"] = "Usuario registrado exitosamente";
-            response["userId"] = mongoId;
+            response["userId"] = postgresId;
             response["keycloakId"] = keycloakId;
             response["email"] = email;
             response["firstName"] = firstName;
@@ -434,8 +450,8 @@ private:
             response["role"] = role;
             res.body() = json::serialize(response);
             
-            emitAuthEvent("user_registered", mongoId, email, status_code,
-                         {{"clientId", clientId}, {"role", role}, {"age", age}});
+            emitAuthEvent("user_registered", postgresId, email, status_code,
+                        {{"clientId", clientId}, {"role", role}, {"age", age}});
             
         } catch (const std::exception& e) {
             int status_code = static_cast<int>(http::status::bad_request);
@@ -554,15 +570,13 @@ private:
                 return;
             }
             
-            // Guardar valores antiguos
             std::string oldFirstName = userOpt->firstName;
             std::string oldLastName = userOpt->lastName;
             int oldAge = userOpt->age;
             std::string oldClientId = userOpt->clientId;
             std::string oldRole = userOpt->role;
             
-            // Crear objeto con todos los campos
-            User updatedUser = *userOpt;
+            user::User updatedUser = *userOpt;
             
             if (obj.contains("firstName")) {
                 updatedUser.firstName = std::string(obj.at("firstName").as_string());
@@ -592,19 +606,18 @@ private:
                 updatedUser.profilePic = std::string(obj.at("profilePic").as_string());
             }
             
-            // Actualizar displayName automáticamente
             updatedUser.displayName = updatedUser.firstName + " " + updatedUser.lastName;
             
             bool roleChanged = (oldRole != updatedUser.role);
             bool clientChanged = (oldClientId != updatedUser.clientId);
             
-            // 1. Actualizar en MongoDB
-            bool mongoOk = UserService::getInstance().updateFullProfile(userOpt->id, updatedUser);
+            // 1. Actualizar en PostgreSQL
+            bool pgOk = UserService::getInstance().updateFullProfile(userOpt->id, updatedUser);
             
-            if (!mongoOk) {
+            if (!pgOk) {
                 res.result(http::status::internal_server_error);
                 json::object error;
-                error["error"] = "Error actualizando usuario en MongoDB";
+                error["error"] = "Error actualizando usuario en PostgreSQL";
                 res.body() = json::serialize(error);
                 return;
             }
@@ -630,10 +643,12 @@ private:
                 );
             }
             
-            // 4. Obtener el usuario actualizado para devolver
+            // 4. Invalidar caché
+            
+            // 5. Obtener el usuario actualizado para devolver
             auto finalUserOpt = UserService::getInstance().getUserById(userOpt->id);
             
-            // 5. Respuesta con datos completos
+            // 6. Respuesta
             res.result(http::status::ok);
             json::object response;
             response["message"] = "Usuario actualizado exitosamente";
@@ -651,7 +666,6 @@ private:
             response["roleChanged"] = roleChanged;
             response["clientChanged"] = clientChanged;
             
-            // Incluir datos adicionales del usuario actualizado
             if (finalUserOpt) {
                 response["followers"] = json::array(finalUserOpt->followers.begin(), finalUserOpt->followers.end());
                 response["following"] = json::array(finalUserOpt->following.begin(), finalUserOpt->following.end());
@@ -696,15 +710,13 @@ private:
             
             std::string refreshToken = std::string(obj.at("refreshToken").as_string());
             
-            // Obtener realm de variable de entorno
             const char* keycloakRealm = std::getenv("KEYCLOAK_REALM");
             std::string realm = keycloakRealm ? keycloakRealm : "yung-accountant";
             
-            // Usar el refresh token para obtener un nuevo access token
             std::stringstream ss;
             ss << "client_id=admin-cli"
-            << "&grant_type=refresh_token"
-            << "&refresh_token=" << refreshToken;
+               << "&grant_type=refresh_token"
+               << "&refresh_token=" << refreshToken;
             
             std::string response = keycloakClient->httpPost(
                 "/realms/" + realm + "/protocol/openid-connect/token", 
@@ -771,15 +783,17 @@ private:
             error["error"] = "Usuario no encontrado";
             res.body() = json::serialize(error);
             
-            emitAuthEvent("delete_account_failed", userInfo.mongoId, userInfo.email, status_code,
+            emitAuthEvent("delete_account_failed", userInfo.postgresId, userInfo.email, status_code,
                          {{"reason", "user_not_found"}});
             return;
         }
         
         bool keycloakOk = keycloakClient->deleteUser(userOpt->keycloakId);
-        bool mongoOk = UserService::getInstance().deleteUser(userOpt->id);
+        bool pgOk = UserService::getInstance().deleteUser(userOpt->id);
         
-        if (mongoOk && keycloakOk) {
+        if (pgOk && keycloakOk) {
+            // Invalidar caché
+            
             int status_code = static_cast<int>(http::status::ok);
             res.result(status_code);
             json::object response;
@@ -797,7 +811,7 @@ private:
             
             std::string reason = "";
             if (!keycloakOk) reason = "keycloak_delete_failed";
-            if (!mongoOk) reason = "mongodb_delete_failed";
+            if (!pgOk) reason = "postgresql_delete_failed";
             
             emitAuthEvent("delete_account_failed", userOpt->id, userInfo.email, status_code,
                          {{"reason", reason}});
@@ -845,7 +859,7 @@ private:
                 response["sessionsClosed"] = sessionsClosed;
                 res.body() = json::serialize(response);
                 
-                emitAuthEvent("logout", userInfo.mongoId, userInfo.email, status_code,
+                emitAuthEvent("logout", userInfo.postgresId, userInfo.email, status_code,
                              {{"refreshInvalidated", logoutSuccess}, {"sessionsClosed", sessionsClosed}});
             } else {
                 int status_code = static_cast<int>(http::status::internal_server_error);
@@ -854,7 +868,7 @@ private:
                 error["error"] = "Error al cerrar sesión";
                 res.body() = json::serialize(error);
                 
-                emitAuthEvent("logout_failed", userInfo.mongoId, userInfo.email, status_code,
+                emitAuthEvent("logout_failed", userInfo.postgresId, userInfo.email, status_code,
                              {{"reason", "keycloak_logout_failed"}});
             }
             
@@ -873,12 +887,8 @@ private:
     void handle_get_user_by_email(http::response<http::string_body>& res) {
         try {
             std::string target(req_.target().begin(), req_.target().end());
-            
-            // Extraer email del path: /users/by-email/encoded@email.com
             std::string prefix = "/users/by-email/";
             std::string encodedEmail = target.substr(prefix.length());
-            
-            // Decodificar email (URL decode)
             std::string email = urlDecode(encodedEmail);
             
             auto userOpt = UserService::getInstance().getUserByEmail(email);
@@ -924,7 +934,6 @@ private:
         }
     }
 
-
     void handle_follow_user(http::response<http::string_body>& res) {
         keycloak::UserInfo userInfo = verifyAndGetUser(req_);
         if (!userInfo.isValid) {
@@ -953,6 +962,8 @@ private:
             bool success = UserService::getInstance().followUser(currentUser->id, targetUserId);
             
             if (success) {
+                // Invalidar caché de ambos usuarios
+                
                 res.result(http::status::ok);
                 json::object response;
                 response["message"] = "Followed successfully";
@@ -999,6 +1010,8 @@ private:
             bool success = UserService::getInstance().unfollowUser(currentUser->id, targetUserId);
             
             if (success) {
+                // Invalidar caché de ambos usuarios
+                
                 res.result(http::status::ok);
                 json::object response;
                 response["message"] = "Unfollowed successfully";
@@ -1055,7 +1068,6 @@ private:
         }
     }
 
-
     void handle_refresh_token(http::response<http::string_body>& res) {
         try {
             json::value jv = json::parse(req_.body());
@@ -1071,13 +1083,54 @@ private:
             
             std::string refreshToken = std::string(obj.at("refreshToken").as_string());
             
-            // Obtener realm del environment variable
+            // Obtener clientId del body o del token
+            std::string clientId;
+            
+            // 1. Intentar obtener del body
+            if (obj.contains("clientId")) {
+                clientId = std::string(obj.at("clientId").as_string());
+            }
+            
+            // 2. Si no viene en el body, intentar extraer del token actual
+            if (clientId.empty()) {
+                keycloak::UserInfo userInfo = verifyAndGetUser(req_);
+                if (userInfo.isValid && !userInfo.clientId.empty()) {
+                    clientId = userInfo.clientId;
+                }
+            }
+            
+            // 3. Si aún no tenemos clientId, buscar en BD por email
+            if (clientId.empty()) {
+                std::string token = extractToken(req_);
+                if (!token.empty()) {
+                    // Decodificar email del token (sin verificar firma)
+                    auto userInfo = keycloakClient->verifyToken(token);
+                    if (!userInfo.email.empty()) {
+                        auto userOpt = UserService::getInstance().getUserByEmail(userInfo.email);
+                        if (userOpt) {
+                            clientId = userOpt->clientId;
+                        }
+                    }
+                }
+            }
+            
+            // 4. Si no se encontró clientId, devolver error
+            if (clientId.empty()) {
+                res.result(http::status::bad_request);
+                json::object error;
+                error["error"] = "No se pudo determinar el clientId";
+                error["detail"] = "Incluye 'clientId' en el body o asegúrate de tener un token válido";
+                res.body() = json::serialize(error);
+                return;
+            }
+            
+            std::cout << "[Refresh] Using client_id: " << clientId << std::endl;
+            
             const char* keycloakRealm = std::getenv("KEYCLOAK_REALM");
             std::string realm = keycloakRealm ? keycloakRealm : "yung-accountant";
             
-            // Obtener token usando refresh token
             std::stringstream ss;
-            ss << "client_id=admin-cli"
+            ss << "client_id=" << clientId
             << "&grant_type=refresh_token"
             << "&refresh_token=" << refreshToken;
             
@@ -1086,7 +1139,35 @@ private:
                 ss.str()
             );
             
-            // ... resto del código igual ...
+            json::value jvResponse = json::parse(response);
+            auto& resObj = jvResponse.as_object();
+            
+            if (resObj.contains("access_token")) {
+                json::object result;
+                result["token"] = resObj.at("access_token").as_string();
+                
+                if (resObj.contains("refresh_token")) {
+                    result["refreshToken"] = resObj.at("refresh_token").as_string();
+                }
+                
+                if (resObj.contains("expires_in")) {
+                    result["expiresIn"] = resObj.at("expires_in");
+                }
+                
+                result["clientId"] = clientId;
+                
+                res.result(http::status::ok);
+                res.body() = json::serialize(result);
+                
+                std::cout << "✓ Token refreshed successfully for client: " << clientId << std::endl;
+            } else {
+                res.result(http::status::unauthorized);
+                json::object error;
+                error["error"] = "Invalid refresh token";
+                error["detail"] = resObj.contains("error_description") ? 
+                    resObj.at("error_description").as_string() : "Unknown error";
+                res.body() = json::serialize(error);
+            }
             
         } catch (const std::exception& e) {
             res.result(http::status::bad_request);
@@ -1096,25 +1177,21 @@ private:
         }
     }
 
-    // Endpoint adicional para verificar y renovar sesión
     void handle_refresh_session(http::response<http::string_body>& res) {
-        // Verificar el access token actual
         keycloak::UserInfo userInfo = verifyAndGetUser(req_);
         
         if (!userInfo.isValid) {
-            // Si el access token expiró, permitir refresh con refresh token
             handle_refresh_token(res);
             return;
         }
         
-        // Si el token aún es válido, devolver información de la sesión
         json::object result;
         result["valid"] = true;
         result["userId"] = userInfo.id;
         result["email"] = userInfo.email;
         result["firstName"] = userInfo.firstName;
         result["lastName"] = userInfo.lastName;
-        result["mongoId"] = userInfo.mongoId;
+        result["postgresId"] = userInfo.postgresId;
         
         res.result(http::status::ok);
         res.body() = json::serialize(result);
@@ -1123,7 +1200,6 @@ private:
     void handle_get_clients(http::response<http::string_body>& res) {
         json::array clientsArray;
         
-        // Clientes desde la base de datos o hardcodeados
         json::object client1;
         client1["id"] = "alcaldia-duitama";
         client1["name"] = "Alcaldía de Duitama";
@@ -1227,11 +1303,6 @@ int main() {
         const char* pgPassword = std::getenv("POSTGRES_PASSWORD");
         const char* pgDatabase = std::getenv("POSTGRES_DB");
         
-        if (!pgHost) pgHost = "postgresdb";
-        if (!pgPort) pgPort = "5432";
-        if (!pgUser) pgUser = "admin";
-        if (!pgPassword) pgPassword = "secret123";
-        if (!pgDatabase) pgDatabase = "yung_accountant";
         
         std::cout << "Connecting to PostgreSQL: " << pgHost << ":" << pgPort << " db=" << pgDatabase << std::endl;
         
@@ -1248,6 +1319,21 @@ int main() {
             return 1;
         }
         
+        // Conexión a Redis
+        const char* redisHost = std::getenv("REDIS_HOST");
+        const char* redisPort = std::getenv("REDIS_PORT");
+        const char* redisPassword = std::getenv("REDIS_PASSWORD");
+        
+        if (!redisHost) redisHost = "redis";
+        if (!redisPort) redisPort = "6379";
+        
+        std::cout << "Connecting to Redis: " << redisHost << ":" << redisPort << std::endl;
+        
+        auto& redis = redis::RedisClient::getInstance();
+        if (!redis.connect(redisHost, std::stoi(redisPort), redisPassword ? redisPassword : "")) {
+            std::cerr << "Warning: Failed to connect to Redis. Continuing without cache..." << std::endl;
+        }
+        
         // Inicializar Kafka
         const char* kafkaBroker = std::getenv("KAFKA_BROKER");
         if (!kafkaBroker) kafkaBroker = "kafka:9092";
@@ -1256,6 +1342,7 @@ int main() {
         kafka::getProducer(); 
         
         std::cout << "Auth Service listening on 0.0.0.0:" << port << std::endl;
+        std::cout << "Redis cache: " << (redis.isConnected() ? "enabled" : "disabled") << std::endl;
         
         HttpServer server("0.0.0.0", port);
         server.run();
